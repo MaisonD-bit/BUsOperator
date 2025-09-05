@@ -1,0 +1,603 @@
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `position-fixed top-0 end-0 m-3 alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
+    toast.style.zIndex = '9999';
+    toast.innerHTML = `
+        ${message}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    `;
+    
+    document.body.appendChild(toast);
+    
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.parentNode.removeChild(toast);
+        }
+    }, 3000);
+}
+
+function toggleScheduleForm() {
+    const formCard = document.getElementById('scheduleFormCard');
+    const toggleBtn = document.getElementById('toggleScheduleFormBtn');
+    
+    if (formCard.style.display === 'none' || !formCard.style.display) {
+        // Show form
+        formCard.style.display = 'block';
+        
+        // Scroll to form
+        formCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+}
+
+function hideScheduleForm() {
+    const formCard = document.getElementById('scheduleFormCard');
+    
+    formCard.style.display = 'none';
+    
+    // Reset form when hiding
+    resetForm();
+}
+
+// Route details functionality
+function updateRouteDetails() {
+    const routeSelect = document.getElementById('route');
+    const selectedRoute = routeSelect.options[routeSelect.selectedIndex];
+    const routeDetails = document.getElementById('route-details');
+    
+    if (selectedRoute.value) {
+        routeDetails.style.display = 'block';
+        
+        document.getElementById('route-path').textContent = 
+            selectedRoute.dataset.start + ' → ' + selectedRoute.dataset.end;
+        document.getElementById('regular-price').textContent = 
+            parseFloat(selectedRoute.dataset.regular || 0).toFixed(2);
+        document.getElementById('aircon-price').textContent = 
+            parseFloat(selectedRoute.dataset.aircon || 0).toFixed(2);
+        document.getElementById('duration').textContent = 
+            selectedRoute.dataset.duration || '-';
+        
+        updateFare();
+    } else {
+        routeDetails.style.display = 'none';
+    }
+}
+
+function updateFare() {
+    const routeSelect = document.getElementById('route');
+    const busSelect = document.getElementById('bus');
+    const selectedRoute = routeSelect.options[routeSelect.selectedIndex];
+    const selectedBus = busSelect.options[busSelect.selectedIndex];
+    
+    if (selectedRoute.value && selectedBus.value) {
+        const busType = selectedBus.dataset.type;
+        const isAircon = busType && (busType.toLowerCase().includes('air') || busType.toLowerCase().includes('ac'));
+        
+        const regularPrice = parseFloat(selectedRoute.dataset.regular || 0);
+        const airconPrice = parseFloat(selectedRoute.dataset.aircon || 0);
+        
+        const finalFare = isAircon && airconPrice > 0 ? airconPrice : regularPrice;
+        
+        document.getElementById('bus-type').textContent = busType || '-';
+        document.getElementById('final-fare').textContent = finalFare.toFixed(2);
+        
+        const fareCard = document.getElementById('final-fare').closest('.bg-success, .bg-info');
+        if (fareCard) {
+            if (isAircon) {
+                fareCard.className = fareCard.className.replace('bg-success', 'bg-info');
+            } else {
+                fareCard.className = fareCard.className.replace('bg-info', 'bg-success');
+            }
+        }
+    } else if (selectedRoute.value) {
+        const regularPrice = parseFloat(selectedRoute.dataset.regular || 0);
+        document.getElementById('bus-type').textContent = '-';
+        document.getElementById('final-fare').textContent = regularPrice.toFixed(2);
+    }
+}
+
+// Form reset functionality
+function resetForm() {
+    document.getElementById('scheduleForm').reset();
+    document.getElementById('route-details').style.display = 'none';
+    clearValidationErrors();
+    
+    // Reset submit button
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    if (submitBtn && submitText) {
+        submitBtn.disabled = false;
+        submitText.textContent = 'Create Schedule';
+    }
+}
+
+// Clear validation errors
+function clearValidationErrors() {
+    const inputs = document.querySelectorAll('.form-control, .form-select');
+    inputs.forEach(input => {
+        input.classList.remove('is-invalid');
+    });
+    
+    const errorDivs = document.querySelectorAll('.invalid-feedback');
+    errorDivs.forEach(div => {
+        div.textContent = '';
+    });
+}
+
+// Show validation errors
+function showValidationErrors(errors) {
+    clearValidationErrors();
+    
+    for (const [field, messages] of Object.entries(errors)) {
+        const input = document.getElementById(field) || document.getElementById(`edit_${field}`);
+        const errorDiv = document.getElementById(`${field}_error`) || document.getElementById(`edit_${field}_error`);
+        
+        if (input && errorDiv) {
+            input.classList.add('is-invalid');
+            errorDiv.textContent = messages[0];
+        }
+    }
+}
+
+// Submit schedule form
+function submitScheduleForm(e) {
+    e.preventDefault();
+    
+    const form = document.getElementById('scheduleForm');
+    const formData = new FormData(form);
+    const submitBtn = document.getElementById('submitBtn');
+    const submitText = document.getElementById('submitText');
+    
+    // LOG: Debug form data being sent
+    console.log('Form data being sent:');
+    for (let pair of formData.entries()) {
+        console.log(pair[0] + ': ' + pair[1]);
+    }
+    
+    // Clear previous validation errors
+    clearValidationErrors();
+    
+    if (submitBtn && submitText) {
+        submitBtn.disabled = true;
+        submitText.textContent = 'Creating...';
+    }
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        // LOG: Response details
+        console.log('Response status:', response.status);
+        console.log('Response headers:', response.headers);
+        
+        if (!response.ok) {
+            return response.json().then(err => {
+                console.log('Error response:', err); // LOG: Full error response
+                return Promise.reject(err);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Success response:', data); // LOG: Success response
+        if (data.success) {
+            showToast(data.message, 'success');
+            resetForm();
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            throw new Error(data.message || 'Unknown error occurred');
+        }
+    })
+    .catch(error => {
+        console.error('Full error object:', error); // LOG: Full error
+        
+        if (error.errors) {
+            console.log('Validation errors:', error.errors); // LOG: Validation errors
+            showValidationErrors(error.errors);
+            showToast('Please check the form for errors', 'error');
+        } else if (error.message) {
+            console.log('Error message:', error.message); // LOG: Error message
+            showToast('Error creating schedule: ' + error.message, 'error');
+        } else {
+            console.log('Unknown error:', error); // LOG: Unknown error
+            showToast('Error creating schedule: Unknown error', 'error');
+        }
+    })
+    .finally(() => {
+        if (submitBtn && submitText) {
+            submitBtn.disabled = false;
+            submitText.textContent = 'Create Schedule';
+        }
+    });
+}
+
+// Helper function to show modal
+function showModal(modalId) {
+    const modalElement = document.getElementById(modalId);
+    if (modalElement) {
+        // Check if Bootstrap is available
+        if (typeof window.bootstrap !== 'undefined') {
+            new window.bootstrap.Modal(modalElement).show();
+        } else {
+            // Fallback for when Bootstrap isn't loaded yet
+            modalElement.classList.add('show');
+            modalElement.style.display = 'block';
+            modalElement.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('modal-open');
+            
+            // Add backdrop
+            const backdrop = document.createElement('div');
+            backdrop.className = 'modal-backdrop fade show';
+            backdrop.id = 'modal-backdrop';
+            document.body.appendChild(backdrop);
+        }
+    }
+}
+
+// Helper function to hide modal
+function hideModal(modalId) {
+    const modalElement = document.getElementById(modalId);
+    if (modalElement) {
+        // Check if Bootstrap is available
+        if (typeof window.bootstrap !== 'undefined') {
+            const modalInstance = window.bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        } else {
+            // Fallback for when Bootstrap isn't loaded yet
+            modalElement.classList.remove('show');
+            modalElement.style.display = 'none';
+            modalElement.setAttribute('aria-hidden', 'true');
+            document.body.classList.remove('modal-open');
+            
+            // Remove backdrop
+            const backdrop = document.getElementById('modal-backdrop');
+            if (backdrop) {
+                backdrop.remove();
+            }
+        }
+    }
+}
+
+// Modal functions for view and edit
+function viewSchedule(id) {
+    fetch(`/api/schedules/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            const content = `
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Driver:</strong> ${data.driver?.name || 'N/A'}</p>
+                        <p><strong>Bus:</strong> ${data.bus?.bus_number || 'N/A'} (${data.bus?.model || 'N/A'})</p>
+                        <p><strong>Route:</strong> ${data.route?.name || 'N/A'} (${data.route?.code || 'N/A'})</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Date:</strong> ${formatDateToDMY(data.date)}</p>
+                        <p><strong>Time:</strong> ${data.start_time} - ${data.end_time}</p>
+                        <p><strong>Status:</strong> <span class="badge bg-primary">${data.status}</span></p>
+                    </div>
+                </div>
+                ${data.notes ? `<div class="mt-3"><strong>Notes:</strong><br>${data.notes}</div>` : ''}
+            `;
+            document.getElementById('viewScheduleContent').innerHTML = content;
+            showModal('viewScheduleModal');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to load schedule details', 'error');
+        });
+}
+
+function editSchedule(id) {
+    fetch(`/api/schedules/${id}`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('edit_schedule_id').value = data.id;
+            document.getElementById('edit_route_id').value = data.route_id;
+            document.getElementById('edit_bus_id').value = data.bus_id;
+            document.getElementById('edit_driver_id').value = data.driver_id;
+            document.getElementById('edit_status').value = data.status;
+            document.getElementById('edit_date').value = data.date;
+            document.getElementById('edit_start_time').value = data.start_time;
+            document.getElementById('edit_end_time').value = data.end_time;
+            document.getElementById('edit_notes').value = data.notes || '';
+            
+            document.getElementById('editScheduleForm').action = `/schedules/${id}`;
+            showModal('editScheduleModal');
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Failed to load schedule details', 'error');
+        });
+}
+
+function saveScheduleChanges() {
+    const form = document.getElementById('editScheduleForm');
+    const formData = new FormData(form);
+    const saveBtn = document.getElementById('saveScheduleBtn');
+    const saveText = document.getElementById('saveScheduleText');
+    const originalText = saveText.textContent;
+    
+    // Clear previous validation errors
+    clearValidationErrors();
+    
+    saveBtn.disabled = true;
+    saveText.textContent = 'Saving...';
+    
+    fetch(form.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(err => Promise.reject(err));
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showToast(data.message, 'success');
+            hideModal('editScheduleModal');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            throw new Error(data.message || 'Unknown error occurred');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        
+        if (error.errors) {
+            showValidationErrors(error.errors);
+            showToast('Please check the form for errors', 'error');
+        } else {
+            showToast('Error updating schedule: ' + (error.message || 'Unknown error'), 'error');
+        }
+    })
+    .finally(() => {
+        saveBtn.disabled = false;
+        saveText.textContent = originalText;
+    });
+}
+
+function deleteSchedule(id) {
+    if (confirm('Are you sure you want to delete this schedule? This action cannot be undone.')) {
+        fetch(`/schedules/${id}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showToast(data.message, 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                showToast('Error deleting schedule: ' + (data.message || 'Unknown error'), 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showToast('Error deleting schedule', 'error');
+        });
+    }
+}
+
+// Clear filters functionality
+function clearFilters() {
+    // Reset all filter dropdowns and inputs
+    const filterDriver = document.getElementById('filterDriver');
+    const filterRoute = document.getElementById('filterRoute');
+    const filterStatus = document.getElementById('filterStatus');
+    const filterDate = document.getElementById('filterDate');
+    
+    if (filterDriver) filterDriver.value = '';
+    if (filterRoute) filterRoute.value = '';
+    if (filterStatus) filterStatus.value = '';
+    if (filterDate) filterDate.value = '';
+    
+    // Navigate to clear URL
+    window.location.href = window.location.pathname;
+}
+
+// Date format helper function
+function formatDateToDMY(dateString) {
+    if (!dateString) return '';
+    try {
+        const date = new Date(dateString);
+        const day = String(date.getDate()).padStart(2, '0');
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const year = date.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch (e) {
+        return dateString;
+    }
+}
+
+// Validate form before submission
+function validateScheduleForm() {
+    const route = document.getElementById('route').value;
+    const driver = document.getElementById('driver').value;
+    const bus = document.getElementById('bus').value;
+    const startTime = document.getElementById('start_time').value;
+    const endTime = document.getElementById('end_time').value;
+    const date = document.getElementById('date').value;
+    
+    if (!route || !driver || !bus || !startTime || !endTime || !date) {
+        return 'Please fill in all required fields.';
+    }
+    
+    if (endTime <= startTime) {
+        return 'End time must be after start time.';
+    }
+    
+    // Check if the selected date is in the past
+    const selectedDate = new Date(date);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    if (selectedDate < today) {
+        return 'Cannot schedule for past dates.';
+    }
+    
+    return null;
+}
+
+// Custom placeholder for date input
+function setupDatePlaceholder() {
+    const filterDateInput = document.getElementById('filterDate');
+    if (filterDateInput) {
+        const placeholder = filterDateInput.getAttribute('data-placeholder');
+        
+        // Set initial appearance
+        if (!filterDateInput.value) {
+            filterDateInput.setAttribute('data-date', placeholder);
+            filterDateInput.style.color = '#6c757d'; // Bootstrap text-muted color
+        }
+        
+        // Handle focus - show calendar
+        filterDateInput.addEventListener('focus', function() {
+            this.style.color = '#212529'; // Normal text color
+            this.removeAttribute('data-date');
+        });
+        
+        // Handle blur - restore placeholder if empty
+        filterDateInput.addEventListener('blur', function() {
+            if (!this.value) {
+                this.setAttribute('data-date', placeholder);
+                this.style.color = '#6c757d';
+            }
+        });
+        
+        // Handle change - keep normal color when date is selected
+        filterDateInput.addEventListener('change', function() {
+            if (this.value) {
+                this.style.color = '#212529';
+                this.removeAttribute('data-date');
+            }
+        });
+    }
+}
+
+// Make functions globally available
+window.updateRouteDetails = updateRouteDetails;
+window.updateFare = updateFare;
+window.resetForm = resetForm;
+window.viewSchedule = viewSchedule;
+window.editSchedule = editSchedule;
+window.saveScheduleChanges = saveScheduleChanges;
+window.deleteSchedule = deleteSchedule;
+window.clearFilters = clearFilters;
+window.showModal = showModal;
+window.hideModal = hideModal;
+window.formatDateToDMY = formatDateToDMY;
+window.toggleScheduleForm = toggleScheduleForm;
+window.hideScheduleForm = hideScheduleForm;
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Route and bus change listeners
+    const routeSelect = document.getElementById('route');
+    const busSelect = document.getElementById('bus');
+    
+    if (routeSelect) {
+        routeSelect.addEventListener('change', updateRouteDetails);
+    }
+    
+    if (busSelect) {
+        busSelect.addEventListener('change', updateFare);
+    }
+    
+    // Reset form button
+    const resetFormBtn = document.getElementById('resetFormBtn');
+    if (resetFormBtn) {
+        resetFormBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            resetForm();
+        });
+    }
+    
+    // Form submission
+    const scheduleForm = document.getElementById('scheduleForm');
+    if (scheduleForm) {
+        scheduleForm.addEventListener('submit', function(e) {
+            const error = validateScheduleForm();
+            if (error) {
+                e.preventDefault();
+                showToast(error, 'error');
+                return false;
+            }
+            submitScheduleForm(e);
+        });
+    }
+
+    // Toggle schedule form button (only shows the form)
+    const toggleScheduleFormBtn = document.getElementById('toggleScheduleFormBtn');
+    if (toggleScheduleFormBtn) {
+        toggleScheduleFormBtn.addEventListener('click', toggleScheduleForm);
+    }
+    
+    // Hide schedule form button (X button)
+    const hideScheduleFormBtn = document.getElementById('hideScheduleFormBtn');
+    if (hideScheduleFormBtn) {
+        hideScheduleFormBtn.addEventListener('click', hideScheduleForm);
+    }
+    
+    // Save schedule changes button
+    const saveScheduleBtn = document.getElementById('saveScheduleBtn');
+    if (saveScheduleBtn) {
+        saveScheduleBtn.addEventListener('click', saveScheduleChanges);
+    }
+    
+    // Clear filters button
+    const clearFiltersBtn = document.querySelector('button[onclick="clearFilters()"]');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            clearFilters();
+        });
+    }
+    
+    // Modal close buttons
+    const modalCloseButtons = document.querySelectorAll('[data-bs-dismiss="modal"]');
+    modalCloseButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const modal = button.closest('.modal');
+            if (modal) {
+                hideModal(modal.id);
+            }
+        });
+    });
+    
+    // Initialize default date
+    const dateInput = document.getElementById('date');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+    
+    // Setup date placeholder for filter
+    setupDatePlaceholder();
+    
+    // Check Bootstrap availability
+    const checkBootstrap = () => {
+        if (typeof window.bootstrap !== 'undefined') {
+            console.log('Bootstrap is available');
+        } else {
+            console.log('Bootstrap not yet available, using fallback modal functions');
+        }
+    };
+    
+    checkBootstrap();
+    setTimeout(checkBootstrap, 100);
+});

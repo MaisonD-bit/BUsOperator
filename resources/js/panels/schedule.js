@@ -148,11 +148,21 @@ function submitScheduleForm(e) {
     const submitBtn = document.getElementById('submitBtn');
     const submitText = document.getElementById('submitText');
     
-    // LOG: Debug form data being sent
+    // Get CSRF token from meta tag
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    
+    if (!csrfToken) {
+        console.error('CSRF token not found!');
+        showToast('CSRF token missing. Please refresh the page.', 'error');
+        return;
+    }
+    
+    // Log form data being sent
     console.log('Form data being sent:');
     for (let pair of formData.entries()) {
         console.log(pair[0] + ': ' + pair[1]);
     }
+    console.log('CSRF Token:', csrfToken);
     
     // Clear previous validation errors
     clearValidationErrors();
@@ -166,25 +176,31 @@ function submitScheduleForm(e) {
         method: 'POST',
         body: formData,
         headers: {
-            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-            'Accept': 'application/json'
+            'X-CSRF-TOKEN': csrfToken,
+            'Accept': 'application/json',
+            'X-Requested-With': 'XMLHttpRequest'
         }
     })
     .then(response => {
-        // LOG: Response details
         console.log('Response status:', response.status);
         console.log('Response headers:', response.headers);
         
         if (!response.ok) {
-            return response.json().then(err => {
-                console.log('Error response:', err); // LOG: Full error response
-                return Promise.reject(err);
+            return response.text().then(text => {
+                try {
+                    const json = JSON.parse(text);
+                    console.log('Error response:', json);
+                    return Promise.reject(json);
+                } catch (e) {
+                    console.log('Raw error response:', text);
+                    return Promise.reject({ message: 'Server error: ' + response.status });
+                }
             });
         }
         return response.json();
     })
     .then(data => {
-        console.log('Success response:', data); // LOG: Success response
+        console.log('Success response:', data);
         if (data.success) {
             showToast(data.message, 'success');
             resetForm();
@@ -194,17 +210,17 @@ function submitScheduleForm(e) {
         }
     })
     .catch(error => {
-        console.error('Full error object:', error); // LOG: Full error
+        console.error('Full error object:', error);
         
         if (error.errors) {
-            console.log('Validation errors:', error.errors); // LOG: Validation errors
+            console.log('Validation errors:', error.errors);
             showValidationErrors(error.errors);
             showToast('Please check the form for errors', 'error');
         } else if (error.message) {
-            console.log('Error message:', error.message); // LOG: Error message
+            console.log('Error message:', error.message);
             showToast('Error creating schedule: ' + error.message, 'error');
         } else {
-            console.log('Unknown error:', error); // LOG: Unknown error
+            console.log('Unknown error:', error);
             showToast('Error creating schedule: Unknown error', 'error');
         }
     })
@@ -425,7 +441,6 @@ function formatDateToDMY(dateString) {
     }
 }
 
-// Validate form before submission
 function validateScheduleForm() {
     const route = document.getElementById('route').value;
     const driver = document.getElementById('driver').value;

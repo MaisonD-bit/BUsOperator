@@ -1,82 +1,101 @@
 <?php
+// filepath: c:\Users\User\Desktop\Laravel BusOp\BusOperator\routes\api.php
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\DriverController;
 use App\Http\Controllers\ScheduleController;
+use App\Http\Controllers\DriverController;
+use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\BusController;
 
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-
-// Test routes - THESE SHOULD WORK AT /api/test
-Route::get('/test', function () {
-    return response()->json([
-        'message' => 'API is working!',
-        'timestamp' => now(),
-        'server' => 'Laravel',
-        'method' => 'GET',
-        'status' => 'success'
-    ]);
-});
-
-Route::post('/test', function () {
-    return response()->json([
-        'message' => 'POST request working!',
-        'timestamp' => now(),
-        'server' => 'Laravel',
-        'method' => 'POST',
-        'status' => 'success',
-        'data_received' => request()->all()
-    ]);
-});
-
-// v1 test routes - THESE SHOULD WORK AT /api/v1/test
+// Public API routes (no authentication required)
 Route::prefix('v1')->group(function () {
-    Route::get('/test', function () {
-        return response()->json([
-            'message' => 'API v1 is working!',
-            'timestamp' => now(),
-            'server' => 'Laravel',
-            'method' => 'GET',
-            'status' => 'success',
-            'version' => 'v1'
-        ]);
+    
+    // Authentication routes for mobile app
+    Route::post('/auth/login', [AuthController::class, 'apiLogin']);
+    Route::post('/auth/register', [AuthController::class, 'apiRegister']);
+    Route::post('/auth/logout', [AuthController::class, 'apiLogout']);
+    Route::get('/auth/user', [AuthController::class, 'getAuthenticatedUser']);
+    
+    // Driver routes for mobile app
+    Route::prefix('drivers')->group(function () {
+        // Get driver schedules
+        Route::get('/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
+        
+        // Get driver profile
+        Route::get('/{id}', [DriverController::class, 'show']);
+
+        // ADD THIS LINE - Driver registration from mobile app
+        Route::post('/register', [DriverController::class, 'registerFromApp']);
+        
+        // Update driver status
+        Route::put('/{id}/status', [DriverController::class, 'updateStatus']);
+    });
+    
+    // Schedule management routes for mobile app
+    Route::prefix('schedules')->group(function () {
+        // Get all schedules (admin view)
+        Route::get('/', [ScheduleController::class, 'index']);
+        
+        // Get specific schedule
+        Route::get('/{id}', [ScheduleController::class, 'webShow']);
+        
+        // Schedule actions for drivers
+        Route::put('/{id}/accept', [ScheduleController::class, 'acceptSchedule']);
+        Route::put('/{id}/decline', [ScheduleController::class, 'declineSchedule']);
+        Route::put('/{id}/start', [ScheduleController::class, 'startSchedule']);
+        Route::put('/{id}/complete', [ScheduleController::class, 'completeSchedule']);
+        
+        // Create new schedule (admin)
+        Route::post('/', [ScheduleController::class, 'assignToDriver']);
+    });
+    
+    // Route information for mobile app
+    Route::prefix('routes')->group(function () {
+        Route::get('/', [RouteController::class, 'index']);
+        Route::get('/{id}', [RouteController::class, 'show']);
+    });
+    
+    // Bus information for mobile app
+    Route::prefix('buses')->group(function () {
+        Route::get('/', [BusController::class, 'index']);
+        Route::get('/{id}', [BusController::class, 'show']);
     });
 
-    Route::post('/test', function () {
-        return response()->json([
-            'message' => 'POST request working in v1!',
-            'timestamp' => now(),
-            'server' => 'Laravel',
-            'method' => 'POST',
-            'status' => 'success',
-            'version' => 'v1',
-            'data_received' => request()->all()
-        ]);
-    });
+    Route::get('drivers', [DriverController::class, 'index']);
+});
 
-    // Driver Registration and Authentication for Mobile
-    Route::post('/drivers/register', [DriverController::class, 'registerFromApp'])->name('api.drivers.register');
-    Route::post('/drivers/login', [DriverController::class, 'loginFromApp'])->name('api.drivers.login');
+// Legacy routes for backward compatibility (these might be used by your web panel AJAX calls)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
     
-    // Driver Profile and Schedule Management for Mobile
-    Route::get('/drivers/{id}/profile', [DriverController::class, 'getProfile'])->name('api.drivers.profile');
-    Route::put('/drivers/{id}/profile', [DriverController::class, 'updateProfile'])->name('api.drivers.update-profile');
-    Route::get('/drivers/{id}/schedules', [DriverController::class, 'getDriverSchedules'])->name('api.drivers.schedules');
-    Route::put('/drivers/{id}/schedules/{scheduleId}/status', [DriverController::class, 'updateScheduleStatus'])->name('api.drivers.schedule-status');
+    // Web panel API routes
+    Route::get('/schedules/{id}', [ScheduleController::class, 'webShow']);
+    Route::get('/drivers/{id}', [DriverController::class, 'show']);
+});
+
+// Alternative routes without version prefix (for your current Ionic setup)
+Route::group(['middleware' => 'api'], function () {
     
-    // Schedule Management for Mobile App
-    Route::post('/schedules/assign', [ScheduleController::class, 'assignToDriver'])->name('api.schedules.assign');
-    Route::get('/schedules/driver/{driverId}', [ScheduleController::class, 'getDriverSchedules'])->name('api.schedules.driver');
-    Route::put('/schedules/{id}/accept', [ScheduleController::class, 'acceptSchedule'])->name('api.schedules.accept');
-    Route::put('/schedules/{id}/decline', [ScheduleController::class, 'declineSchedule'])->name('api.schedules.decline');
+    // Driver schedules - THE MAIN ROUTE YOUR IONIC APP NEEDS
+    Route::get('drivers/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
     
-    // Routes and Bus information for Mobile
-    Route::get('/routes', [RouteController::class, 'apiIndex'])->name('api.routes.index');
-    Route::get('/routes/{id}', [RouteController::class, 'apiShow'])->name('api.routes.show');
-    Route::get('/buses', [BusController::class, 'apiIndex'])->name('api.buses.index');
-    Route::get('/buses/{id}', [BusController::class, 'apiShow'])->name('api.buses.show');
+    // Schedule actions
+    Route::put('schedules/{id}/accept', [ScheduleController::class, 'acceptSchedule']);
+    Route::put('schedules/{id}/decline', [ScheduleController::class, 'declineSchedule']);
+    Route::put('schedules/{id}/start', [ScheduleController::class, 'startSchedule']);
+    Route::put('schedules/{id}/complete', [ScheduleController::class, 'completeSchedule']);
+    
+    // Other API endpoints
+    Route::get('schedules', [ScheduleController::class, 'index']);
+    Route::get('schedules/{id}', [ScheduleController::class, 'webShow']);
+    Route::post('schedules', [ScheduleController::class, 'assignToDriver']);
+    
+    Route::get('drivers/{id}', [DriverController::class, 'show']);
+    Route::get('routes', [RouteController::class, 'index']);
+    Route::get('buses', [BusController::class, 'index']);
+    Route::get('drivers', [DriverController::class, 'index']);
 });

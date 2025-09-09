@@ -39,7 +39,7 @@
                                         data-regular="{{ $route->regular_price }}"
                                         data-aircon="{{ $route->aircon_price }}"
                                         data-duration="{{ $route->estimated_duration }}">
-                                    {{ $route->code }} - {{ $route->name }}
+                                    {{ $route->name }}
                                 </option>
                             @endforeach
                         </select>
@@ -69,13 +69,28 @@
                         <label for="bus" class="form-label fw-bold">Select Bus <span class="text-danger">*</span></label>
                         <select id="bus" name="bus_id" class="form-select" required>
                             <option value="">-- Choose Bus --</option>
-                            @foreach($buses ?? [] as $bus)
-                                <option value="{{ $bus->id }}" data-type="{{ $bus->model }}">
-                                    {{ $bus->bus_number }} - {{ $bus->model }}
-                                </option>
-                            @endforeach
+                            @if(isset($buses) && $buses->count() > 0)
+                                @foreach($buses as $bus)
+                                    <option value="{{ $bus->id }}" 
+                                            data-type="{{ $bus->accommodation_type }}"
+                                            data-model="{{ $bus->model }}">
+                                        {{ $bus->bus_number }} - {{ $bus->model }} 
+                                        @if($bus->accommodation_type === 'air-conditioned')
+                                            (A/C)
+                                        @endif
+                                    </option>
+                                @endforeach
+                            @else
+                                <option disabled>No active buses available</option>
+                            @endif
                         </select>
                         <div class="invalid-feedback" id="bus_id_error"></div>
+                        <!-- DEBUG INFO -->
+                        @if(config('app.debug'))
+                            <small class="text-muted">
+                                Debug: {{ isset($buses) ? $buses->count() : 'No buses variable' }} buses found
+                            </small>
+                        @endif
                     </div>
                     <div class="col-md-3 mb-3">
                         <label for="date" class="form-label fw-bold">Date <span class="text-danger">*</span></label>
@@ -140,15 +155,25 @@
                 </div>
 
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label for="start_time" class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
                         <input type="time" id="start_time" name="start_time" class="form-control" required>
                         <div class="invalid-feedback" id="start_time_error"></div>
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <label for="end_time" class="form-label fw-bold">End Time <span class="text-danger">*</span></label>
                         <input type="time" id="end_time" name="end_time" class="form-control" required>
                         <div class="invalid-feedback" id="end_time_error"></div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="status" class="form-label fw-bold">Status</label>
+                        <select id="status" name="status" class="form-select">
+                            <option value="scheduled">Scheduled</option>
+                            <option value="active">Active</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                        <div class="invalid-feedback" id="status_error"></div>
                     </div>
                 </div>
                 
@@ -191,7 +216,7 @@
                     <select id="filterRoute" name="route" class="form-select">
                         <option value="">All Routes</option>
                         @foreach($routes ?? [] as $route)
-                            <option value="{{ $route->id }}" {{ request('route') == $route->id ? 'selected' : '' }}>{{ $route->name }} ({{ $route->code }})</option>
+                            <option value="{{ $route->id }}" {{ request('route') == $route->id ? 'selected' : '' }}>{{ $route->name }}</option>
                         @endforeach
                     </select>
                 </div>
@@ -232,6 +257,7 @@
                             <th>Route</th>
                             <th>Date</th>
                             <th>Time</th>
+                            <th>Fare</th>
                             <th>Status</th>
                             <th>Actions</th>
                         </tr>
@@ -252,7 +278,15 @@
                                     <div class="bg-info bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px;">
                                         <i class="fas fa-bus text-info"></i>
                                     </div>
-                                    {{ $schedule->bus->bus_number ?? 'N/A' }}
+                                    <div>
+                                        <div class="fw-semibold">{{ $schedule->bus->bus_number ?? 'N/A' }}</div>
+                                        <small class="text-muted">
+                                            {{ $schedule->bus->model ?? '' }}
+                                            @if($schedule->bus && $schedule->bus->accommodation_type === 'air-conditioned')
+                                                <span class="badge badge-sm bg-info ms-1">A/C</span>
+                                            @endif
+                                        </small>
+                                    </div>
                                 </div>
                             </td>
                             <td>
@@ -262,7 +296,7 @@
                                     </div>
                                     <div>
                                         <div class="fw-semibold">{{ $schedule->route->name ?? 'N/A' }}</div>
-                                        <small class="text-muted">{{ $schedule->route->code ?? 'N/A' }}</small>
+                                        <small class="text-muted">{{ $schedule->route->start_location ?? '' }} → {{ $schedule->route->end_location ?? '' }}</small>
                                     </div>
                                 </div>
                             </td>
@@ -276,6 +310,14 @@
                                     <div class="fw-semibold">{{ \Carbon\Carbon::parse($schedule->start_time)->format('h:i A') }}</div>
                                     <div class="text-muted">to</div>
                                     <div class="fw-semibold">{{ \Carbon\Carbon::parse($schedule->end_time)->format('h:i A') }}</div>
+                                </div>
+                            </td>
+                            <td>
+                                <div class="text-center">
+                                    <div class="fw-semibold text-success">₱{{ number_format($schedule->fare_regular, 2) }}</div>
+                                    @if($schedule->fare_aircon != $schedule->fare_regular)
+                                        <small class="text-muted">A/C: ₱{{ number_format($schedule->fare_aircon, 2) }}</small>
+                                    @endif
                                 </div>
                             </td>
                             <td>
@@ -298,6 +340,16 @@
                                     @case('cancelled')
                                         <span class="badge bg-danger fs-6">
                                             <i class="fas fa-times me-1"></i>Cancelled
+                                        </span>
+                                        @break
+                                    @case('accepted')
+                                        <span class="badge bg-info fs-6">
+                                            <i class="fas fa-thumbs-up me-1"></i>Accepted
+                                        </span>
+                                        @break
+                                    @case('declined')
+                                        <span class="badge bg-warning fs-6">
+                                            <i class="fas fa-thumbs-down me-1"></i>Declined
                                         </span>
                                         @break
                                     @default
@@ -463,7 +515,7 @@
                             <select id="edit_route_id" name="route_id" class="form-select" required>
                                 <option value="">-- Select Route --</option>
                                 @foreach($routes ?? [] as $route)
-                                    <option value="{{ $route->id }}">{{ $route->name }} ({{ $route->code }})</option>
+                                    <option value="{{ $route->id }}">{{ $route->name }}</option>
                                 @endforeach
                             </select>
                             <div class="invalid-feedback" id="edit_route_id_error"></div>
@@ -473,7 +525,7 @@
                             <select id="edit_bus_id" name="bus_id" class="form-select" required>
                                 <option value="">-- Select Bus --</option>
                                 @foreach($buses ?? [] as $bus)
-                                    <option value="{{ $bus->id }}">{{ $bus->bus_number }} ({{ $bus->model }})</option>
+                                    <option value="{{ $bus->id }}">{{ $bus->bus_number }} - {{ $bus->model }}</option>
                                 @endforeach
                             </select>
                             <div class="invalid-feedback" id="edit_bus_id_error"></div>
@@ -498,6 +550,8 @@
                                 <option value="active">Active</option>
                                 <option value="completed">Completed</option>
                                 <option value="cancelled">Cancelled</option>
+                                <option value="accepted">Accepted</option>
+                                <option value="declined">Declined</option>
                             </select>
                             <div class="invalid-feedback" id="edit_status_error"></div>
                         </div>

@@ -1,164 +1,137 @@
 <?php
+// filepath: c:\Users\User\Desktop\Laravel BusOp\BusOperator\app\Http\Controllers\ScheduleController.php
 
 namespace App\Http\Controllers;
 
 use App\Models\Schedule;
 use App\Models\Driver;
+use App\Models\Route;
 use App\Models\Bus;
-use App\Models\Route as BusRoute;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Validator;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class ScheduleController extends Controller
 {
+    // ===================================
+    // WEB METHODS (return blade views)
+    // ===================================
+    
     /**
-     * Display schedule panel
+     * Display the schedule panel (WEB)
      */
-    public function index()
+    public function schedulePanel()
     {
-        $schedules = Schedule::with(['driver', 'bus', 'route'])
-            ->where('date', '>=', now()->toDateString())
-            ->orderBy('date')
-            ->orderBy('start_time')
-            ->paginate(15);
-
-        $stats = [
-            'total_schedules' => Schedule::count(),
-            'today_schedules' => Schedule::whereDate('date', today())->count(),
-            'active_schedules' => Schedule::where('status', 'active')->count(),
-            'completed_schedules' => Schedule::where('status', 'completed')->count(),
-            'pending_schedules' => Schedule::where('status', 'scheduled')->count(),
-        ];
-
-        $drivers = Driver::where('status', 'active')->get(['id', 'name', 'email']);
-        $buses = Bus::where('status', 'available')->get(['id', 'bus_number', 'plate_number']);
-        // FIXED: Use correct field names from your database
-        $routes = BusRoute::all(['id', 'name', 'start_location', 'end_location']);
-
-        return view('panels.schedule', compact('schedules', 'stats', 'drivers', 'buses', 'routes'));
-    }
-
-    /**
-     * Store a new schedule
-     */
-    public function store(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'driver_id' => 'required|exists:drivers,id',
-            'bus_id' => 'required|exists:buses,id',
-            'route_id' => 'required|exists:routes,id',
-            'date' => 'required|date|after_or_equal:today',
-            'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
-            'fare_regular' => 'required|numeric|min:0',
-            'fare_aircon' => 'required|numeric|min:0',
-            'status' => 'string|in:scheduled,active,completed,cancelled'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
         try {
-            // Check for conflicts
-            $conflicts = $this->checkScheduleConflicts(
-                $request->driver_id,
-                $request->bus_id,
-                $request->date,
-                $request->start_time,
-                $request->end_time
-            );
-
-            if (!empty($conflicts)) {
+            $routes = Route::all();
+            $buses = Bus::all();
+            $drivers = Driver::all(); // Add this line
+            $schedules = Schedule::with(['route', 'bus', 'driver'])
+                                ->orderBy('date', 'desc')
+                                ->paginate(10);
+            
+            return view('panels.schedule', compact('routes', 'buses', 'drivers', 'schedules'));
+            
+        } catch (\Exception $e) {
+            Log::error("Error loading schedule panel: " . $e->getMessage());
+            
+            return view('panels.schedule', [
+                'routes' => collect(),
+                'buses' => collect(),
+                'drivers' => collect(), // Add this line
+                'schedules' => collect(),
+                'error' => 'Error loading schedule data'
+            ]);
+        }
+    }
+    
+    /**
+     * Store a new schedule (WEB)
+     */
+    public function webStore(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'driver_id' => 'required|exists:drivers,id',
+                'route_id' => 'required|exists:routes,id',
+                'bus_id' => 'required|exists:buses,id',
+                'date' => 'required|date|after_or_equal:today',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'status' => 'required|in:scheduled,active,completed,cancelled',
+                'notes' => 'nullable|string|max:500'
+            ]);
+            
+            // Get route details for fare calculation
+            $route = Route::find($validated['route_id']);
+            $bus = Bus::find($validated['bus_id']);
+            
+            // Calculate fare based on bus type
+            $fare_regular = $route->regular_price ?? 0;
+            $fare_aircon = $route->aircon_price ?? $fare_regular;
+            
+            $isAircon = $bus && $bus->accommodation_type === 'air-conditioned';
+            
+            $schedule = Schedule::create([
+                'driver_id' => $validated['driver_id'],
+                'route_id' => $validated['route_id'],
+                'bus_id' => $validated['bus_id'],
+                'date' => $validated['date'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'status' => $validated['status'],
+                'fare_regular' => $fare_regular,
+                'fare_aircon' => $fare_aircon,
+                'notes' => $validated['notes']
+            ]);
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Schedule created successfully',
+                    'schedule' => $schedule->load(['driver', 'route', 'bus'])
+                ], 201);
+            }
+            
+            return redirect()->route('schedule.panel')->with('success', 'Schedule created successfully');
+            
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Schedule conflicts detected',
-                    'conflicts' => $conflicts
-                ], 409);
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
             }
-
-            $schedule = Schedule::create([
-                'driver_id' => $request->driver_id,
-                'bus_id' => $request->bus_id,
-                'route_id' => $request->route_id,
-                'date' => $request->date,
-                'start_time' => $request->start_time,
-                'end_time' => $request->end_time,
-                'fare_regular' => $request->fare_regular,
-                'fare_aircon' => $request->fare_aircon,
-                'status' => $request->get('status', 'scheduled')
-            ]);
-
-            $schedule->load(['driver', 'bus', 'route']);
-
-            Log::info('Schedule created', [
-                'schedule_id' => $schedule->id,
-                'driver_id' => $schedule->driver_id,
-                'date' => $schedule->date
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Schedule created successfully',
-                'schedule' => $schedule
-            ], 201);
-
+            
+            return redirect()->back()->withErrors($e->errors())->withInput();
+            
         } catch (\Exception $e) {
-            Log::error('Schedule creation error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create schedule'
-            ], 500);
+            Log::error("Error creating schedule: " . $e->getMessage());
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating schedule: ' . $e->getMessage()
+                ], 500);
+            }
+            
+            return redirect()->back()->with('error', 'Error creating schedule')->withInput();
         }
     }
-
+    
     /**
-     * Show schedule details
+     * Display a specific schedule (WEB)
      */
-    public function show($id)
+    public function webShow($id)
     {
         try {
-            $schedule = Schedule::with(['driver', 'bus', 'route'])->findOrFail($id);
-
-            return response()->json([
-                'success' => true,
-                'schedule' => [
-                    'id' => $schedule->id,
-                    'date' => $schedule->date,
-                    'start_time' => $schedule->start_time,
-                    'end_time' => $schedule->end_time,
-                    'status' => $schedule->status,
-                    'fare_regular' => $schedule->fare_regular,
-                    'fare_aircon' => $schedule->fare_aircon,
-                    'driver' => [
-                        'id' => $schedule->driver->id,
-                        'name' => $schedule->driver->name,
-                        'email' => $schedule->driver->email,
-                        'contact_number' => $schedule->driver->contact_number
-                    ],
-                    'bus' => [
-                        'id' => $schedule->bus->id,
-                        'bus_number' => $schedule->bus->bus_number,
-                        'plate_number' => $schedule->bus->plate_number,
-                        'capacity' => $schedule->bus->capacity
-                    ],
-                    'route' => [
-                        'id' => $schedule->route->id,
-                        'name' => $schedule->route->name,
-                        // FIXED: Use correct field names
-                        'start_location' => $schedule->route->start_location,
-                        'end_location' => $schedule->route->end_location,
-                        'distance' => $schedule->route->distance_km
-                    ]
-                ]
-            ]);
-
+            $schedule = Schedule::with(['driver', 'route', 'bus'])->findOrFail($id);
+            
+            return response()->json($schedule);
+            
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -166,195 +139,129 @@ class ScheduleController extends Controller
             ], 404);
         }
     }
-
+    
     /**
-     * Update schedule
+     * Update a schedule (WEB)
      */
-    public function update(Request $request, $id)
-    {
-        $schedule = Schedule::findOrFail($id);
-
-        $validator = Validator::make($request->all(), [
-            'driver_id' => 'exists:drivers,id',
-            'bus_id' => 'exists:buses,id',
-            'route_id' => 'exists:routes,id',
-            'date' => 'date|after_or_equal:today',
-            'start_time' => 'date_format:H:i',
-            'end_time' => 'date_format:H:i|after:start_time',
-            'fare_regular' => 'numeric|min:0',
-            'fare_aircon' => 'numeric|min:0',
-            'status' => 'string|in:scheduled,active,completed,cancelled'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
-        }
-
-        try {
-            // Check for conflicts if time/date/driver/bus changed
-            if ($request->has(['driver_id', 'bus_id', 'date', 'start_time', 'end_time'])) {
-                $conflicts = $this->checkScheduleConflicts(
-                    $request->get('driver_id', $schedule->driver_id),
-                    $request->get('bus_id', $schedule->bus_id),
-                    $request->get('date', $schedule->date),
-                    $request->get('start_time', $schedule->start_time),
-                    $request->get('end_time', $schedule->end_time),
-                    $id // Exclude current schedule
-                );
-
-                if (!empty($conflicts)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Schedule conflicts detected',
-                        'conflicts' => $conflicts
-                    ], 409);
-                }
-            }
-
-            $schedule->update($request->only([
-                'driver_id', 'bus_id', 'route_id', 'date', 'start_time', 
-                'end_time', 'fare_regular', 'fare_aircon', 'status'
-            ]));
-
-            $schedule->load(['driver', 'bus', 'route']);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Schedule updated successfully',
-                'schedule' => $schedule
-            ]);
-
-        } catch (\Exception $e) {
-            Log::error('Schedule update error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update schedule'
-            ], 500);
-        }
-    }
-
-    /**
-     * Delete schedule
-     */
-    public function destroy($id)
+    public function webUpdate(Request $request, $id)
     {
         try {
             $schedule = Schedule::findOrFail($id);
-
-            // Don't allow deletion of active schedules
-            if ($schedule->status === 'active') {
+            
+            $validated = $request->validate([
+                'driver_id' => 'required|exists:drivers,id',
+                'route_id' => 'required|exists:routes,id',
+                'bus_id' => 'required|exists:buses,id',
+                'date' => 'required|date',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'status' => 'required|in:scheduled,active,completed,cancelled,accepted,declined',
+                'notes' => 'nullable|string|max:500'
+            ]);
+            
+            $schedule->update($validated);
+            
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Schedule updated successfully',
+                    'schedule' => $schedule->load(['driver', 'route', 'bus'])
+                ]);
+            }
+            
+            return redirect()->route('schedule.panel')->with('success', 'Schedule updated successfully');
+            
+        } catch (\Exception $e) {
+            Log::error("Error updating schedule: " . $e->getMessage());
+            
+            if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Cannot delete active schedule'
-                ], 400);
+                    'message' => 'Error updating schedule: ' . $e->getMessage()
+                ], 500);
             }
-
+            
+            return redirect()->back()->with('error', 'Error updating schedule');
+        }
+    }
+    
+    /**
+     * Delete a schedule (WEB)
+     */
+    public function webDestroy($id)
+    {
+        try {
+            $schedule = Schedule::findOrFail($id);
             $schedule->delete();
-
+            
             return response()->json([
                 'success' => true,
                 'message' => 'Schedule deleted successfully'
             ]);
-
+            
         } catch (\Exception $e) {
-            Log::error('Schedule deletion error: ' . $e->getMessage());
+            Log::error("Error deleting schedule: " . $e->getMessage());
+            
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to delete schedule'
+                'message' => 'Error deleting schedule: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // ===================================
+    // API METHODS (return JSON responses for mobile app)
+    // ===================================
+
+    /**
+     * Get all schedules (API - admin view)
+     */
+    public function index(Request $request): JsonResponse
+    {
+        try {
+            $query = Schedule::with(['route', 'bus', 'driver']);
+            
+            if ($request->has('status')) {
+                $query->where('status', $request->status);
+            }
+            
+            if ($request->has('date')) {
+                $query->whereDate('date', $request->date);
+            }
+            
+            if ($request->has('driver_id')) {
+                $query->where('driver_id', $request->driver_id);
+            }
+            
+            $perPage = $request->get('per_page', 15);
+            $schedules = $query->orderBy('date', 'desc')
+                             ->orderBy('start_time', 'asc')
+                             ->paginate($perPage);
+            
+            return response()->json([
+                'success' => true,
+                'schedules' => $schedules
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error("Error fetching schedules: " . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error fetching schedules: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Get available drivers for scheduling
+     * Get driver schedules for mobile app (API)
      */
-    public function getAvailableDrivers(Request $request)
-    {
-        $date = $request->get('date', now()->toDateString());
-        $startTime = $request->get('start_time');
-        $endTime = $request->get('end_time');
-        $excludeScheduleId = $request->get('exclude_schedule_id');
-
-        $query = Driver::where('status', 'active')
-            ->whereDoesntHave('schedules', function ($scheduleQuery) use ($date, $startTime, $endTime, $excludeScheduleId) {
-                $scheduleQuery->where('date', $date)
-                      ->where(function ($timeQuery) use ($startTime, $endTime) {
-                          $timeQuery->whereBetween('start_time', [$startTime, $endTime])
-                                   ->orWhereBetween('end_time', [$startTime, $endTime])
-                                   ->orWhere(function ($overlapQuery) use ($startTime, $endTime) {
-                                       $overlapQuery->where('start_time', '<=', $startTime)
-                                                   ->where('end_time', '>=', $endTime);
-                                   });
-                      });
-                
-                if ($excludeScheduleId) {
-                    $scheduleQuery->where('id', '!=', $excludeScheduleId);
-                }
-            });
-
-        $availableDrivers = $query->select('id', 'name', 'email', 'contact_number', 'license_number')->get();
-
-        return response()->json([
-            'success' => true,
-            'drivers' => $availableDrivers
-        ]);
-    }
-
-    /**
-     * Get active schedules
-     */
-    public function getActiveSchedules()
-    {
-        $activeSchedules = Schedule::with(['driver', 'bus', 'route'])
-            ->where('status', 'active')
-            ->where('date', now()->toDateString())
-            ->orderBy('start_time')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'schedules' => $activeSchedules
-        ]);
-    }
-
-    /**
-     * Get today's schedule for a specific driver
-     */
-    public function getTodayScheduleForDriver($driverId)
-    {
-        $todaySchedule = Schedule::with(['bus', 'route'])
-            ->where('driver_id', $driverId)
-            ->where('date', now()->toDateString())
-            ->orderBy('start_time')
-            ->get();
-
-        return response()->json([
-            'success' => true,
-            'schedules' => $todaySchedule
-        ]);
-    }
-
-    // ===== MOBILE APP API METHODS =====
-
-    /**
-     * Assign schedule to driver (from web admin)
-     */
-    public function assignToDriver(Request $request)
-    {
-        return $this->store($request);
-    }
-
-    /**
-     * Get driver schedules for mobile app
-     */
-    public function getDriverSchedules($driverId)
+    public function getDriverSchedules($driverId): JsonResponse
     {
         try {
+            Log::info("Fetching schedules for driver ID: {$driverId}");
+
             $driver = Driver::find($driverId);
-            
             if (!$driver) {
                 return response()->json([
                     'success' => false,
@@ -362,108 +269,116 @@ class ScheduleController extends Controller
                 ], 404);
             }
 
-            $schedules = Schedule::with(['route', 'bus'])
+            $today = Carbon::now()->format('Y-m-d');
+            
+            // Get all schedules for this driver from today onwards
+            $allSchedules = Schedule::with(['route', 'bus'])
                 ->where('driver_id', $driverId)
-                ->where('date', '>=', now()->toDateString())
-                ->orderBy('date')
-                ->orderBy('start_time')
+                ->where('date', '>=', $today)
+                ->orderBy('date', 'asc')
+                ->orderBy('start_time', 'asc')
                 ->get();
+
+            // Categorize schedules properly
+            $todaySchedules = $allSchedules->filter(function($schedule) use ($today) {
+                return $schedule->date === $today;
+            })->values();
+
+            $upcomingSchedules = $allSchedules->filter(function($schedule) use ($today) {
+                return $schedule->date > $today;
+            })->values();
+
+            // Calculate summary with proper counts
+            $summary = [
+                'total_upcoming' => $allSchedules->whereIn('status', ['scheduled', 'accepted'])->count(),
+                'today_schedules' => $todaySchedules->count(),
+                'future_schedules' => $upcomingSchedules->count(),
+                'accepted_today' => $todaySchedules->where('status', 'accepted')->count(),
+                'active_today' => $todaySchedules->where('status', 'active')->count(),
+                'completed_today' => $todaySchedules->where('status', 'completed')->count()
+            ];
+
+            Log::info("Found schedules - Today: {$summary['today_schedules']}, Future: {$summary['future_schedules']}");
 
             return response()->json([
                 'success' => true,
-                'schedules' => $schedules->map(function ($schedule) {
-                    return [
-                        'id' => $schedule->id,
-                        'date' => $schedule->date,
-                        'start_time' => $schedule->start_time,
-                        'end_time' => $schedule->end_time,
-                        'status' => $schedule->status,
-                        'fare_regular' => $schedule->fare_regular,
-                        'fare_aircon' => $schedule->fare_aircon,
-                        'route' => [
-                            'id' => $schedule->route->id,
-                            'name' => $schedule->route->name,
-                            // FIXED: Use correct field names
-                            'start_location' => $schedule->route->start_location,
-                            'end_location' => $schedule->route->end_location,
-                        ],
-                        'bus' => [
-                            'id' => $schedule->bus->id,
-                            'bus_number' => $schedule->bus->bus_number,
-                            'plate_number' => $schedule->bus->plate_number,
-                        ]
-                    ];
-                })
-            ], 200);
+                'driver' => [
+                    'id' => $driver->id,
+                    'name' => $driver->name,
+                    'email' => $driver->email
+                ],
+                'summary' => $summary,
+                'schedules' => [
+                    'today' => $todaySchedules,
+                    'upcoming' => $upcomingSchedules,
+                    'all' => $allSchedules->values()
+                ]
+            ]);
 
         } catch (\Exception $e) {
-            Log::error('Get driver schedules error', [
-                'driver_id' => $driverId,
-                'error' => $e->getMessage()
-            ]);
+            Log::error("Error fetching driver schedules: " . $e->getMessage());
+            Log::error($e->getTraceAsString());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to load schedules'
+                'message' => 'Error fetching schedules: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Accept schedule from mobile app
+     * Accept a schedule (API)
      */
-    public function acceptSchedule($scheduleId)
+    public function acceptSchedule($id)
     {
         try {
-            $schedule = Schedule::find($scheduleId);
-            
-            if (!$schedule) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Schedule not found'
-                ], 404);
-            }
-
-            $schedule->update(['status' => 'accepted']);
-
-            Log::info('Schedule accepted from mobile app', [
-                'schedule_id' => $scheduleId,
-                'driver_id' => $schedule->driver_id
-            ]);
+            $schedule = Schedule::findOrFail($id);
+            $schedule->status = 'accepted';
+            $schedule->save();
 
             return response()->json([
                 'success' => true,
                 'message' => 'Schedule accepted successfully',
-                'schedule' => [
-                    'id' => $schedule->id,
-                    'status' => $schedule->status,
-                    'date' => $schedule->date,
-                    'start_time' => $schedule->start_time,
-                    'end_time' => $schedule->end_time
-                ]
-            ], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Accept schedule error', [
-                'schedule_id' => $scheduleId,
-                'error' => $e->getMessage()
+                'schedule' => $schedule
             ]);
-
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to accept schedule'
+                'message' => 'Failed to accept schedule: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    public function declineSchedule($id)
+    {
+        try {
+            $schedule = Schedule::findOrFail($id);
+            $schedule->status = 'declined';
+            $schedule->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule declined successfully',
+                'schedule' => $schedule
+            ]);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to decline schedule: ' . $e->getMessage()
             ], 500);
         }
     }
 
     /**
-     * Decline schedule from mobile app
+     * Start a schedule (API)
      */
-    public function declineSchedule($scheduleId)
+    public function startSchedule($scheduleId): JsonResponse
     {
         try {
-            $schedule = Schedule::find($scheduleId);
-            
+            Log::info("Attempting to start schedule ID: {$scheduleId}");
+
+            $schedule = Schedule::with(['route', 'bus', 'driver'])->find($scheduleId);
+
             if (!$schedule) {
                 return response()->json([
                     'success' => false,
@@ -471,87 +386,137 @@ class ScheduleController extends Controller
                 ], 404);
             }
 
-            $schedule->update(['status' => 'declined']);
+            if ($schedule->status !== 'accepted') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot start schedule. Current status: {$schedule->status}. Schedule must be accepted first."
+                ], 400);
+            }
 
-            Log::info('Schedule declined from mobile app', [
-                'schedule_id' => $scheduleId,
-                'driver_id' => $schedule->driver_id
-            ]);
+            $today = Carbon::now()->format('Y-m-d');
+            if ($schedule->date !== $today) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Schedule can only be started on the scheduled date'
+                ], 400);
+            }
+
+            $schedule->status = 'active';
+            $schedule->started_at = Carbon::now();
+            $schedule->save();
+
+            Log::info("Schedule {$scheduleId} started by driver {$schedule->driver_id}");
 
             return response()->json([
                 'success' => true,
-                'message' => 'Schedule declined',
-                'schedule' => [
-                    'id' => $schedule->id,
-                    'status' => $schedule->status,
-                    'date' => $schedule->date,
-                    'start_time' => $schedule->start_time,
-                    'end_time' => $schedule->end_time
-                ]
-            ], 200);
+                'message' => 'Trip started successfully',
+                'schedule' => $schedule,
+                'action' => 'started'
+            ]);
 
         } catch (\Exception $e) {
-            Log::error('Decline schedule error', [
-                'schedule_id' => $scheduleId,
-                'error' => $e->getMessage()
-            ]);
+            Log::error("Error starting schedule {$scheduleId}: " . $e->getMessage());
 
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to decline schedule'
+                'message' => 'Error starting schedule: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    // ===== HELPER METHODS =====
+    /**
+     * Complete a schedule (API)
+     */
+    public function completeSchedule($scheduleId): JsonResponse
+    {
+        try {
+            Log::info("Attempting to complete schedule ID: {$scheduleId}");
+
+            $schedule = Schedule::with(['route', 'bus', 'driver'])->find($scheduleId);
+
+            if (!$schedule) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Schedule not found'
+                ], 404);
+            }
+
+            if ($schedule->status !== 'active') {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot complete schedule. Current status: {$schedule->status}. Schedule must be active."
+                ], 400);
+            }
+
+            $schedule->status = 'completed';
+            $schedule->completed_at = Carbon::now();
+            $schedule->save();
+
+            Log::info("Schedule {$scheduleId} completed by driver {$schedule->driver_id}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Trip completed successfully',
+                'schedule' => $schedule,
+                'action' => 'completed'
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error("Error completing schedule {$scheduleId}: " . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error completing schedule: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
     /**
-     * Check for schedule conflicts
+     * Assign schedule to driver (API - for admin use)
      */
-    private function checkScheduleConflicts($driverId, $busId, $date, $startTime, $endTime, $excludeScheduleId = null)
+    public function assignToDriver(Request $request): JsonResponse
     {
-        $conflicts = [];
+        try {
+            $request->validate([
+                'driver_id' => 'required|exists:drivers,id',
+                'route_id' => 'required|exists:routes,id',
+                'bus_id' => 'required|exists:buses,id',
+                'date' => 'required|date|after_or_equal:today',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'fare_regular' => 'required|numeric|min:0',
+                'fare_aircon' => 'nullable|numeric|min:0',
+                'notes' => 'nullable|string|max:500'
+            ]);
 
-        // Check driver conflicts
-        $driverConflicts = Schedule::where('driver_id', $driverId)
-            ->where('date', $date)
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function ($overlapQuery) use ($startTime, $endTime) {
-                          $overlapQuery->where('start_time', '<=', $startTime)
-                                      ->where('end_time', '>=', $endTime);
-                      });
-            })
-            ->when($excludeScheduleId, function ($query) use ($excludeScheduleId) {
-                $query->where('id', '!=', $excludeScheduleId);
-            })
-            ->exists();
+            $schedule = Schedule::create([
+                'driver_id' => $request->driver_id,
+                'route_id' => $request->route_id,
+                'bus_id' => $request->bus_id,
+                'date' => $request->date,
+                'start_time' => $request->start_time,
+                'end_time' => $request->end_time,
+                'status' => 'scheduled',
+                'fare_regular' => $request->fare_regular,
+                'fare_aircon' => $request->fare_aircon ?? $request->fare_regular,
+                'notes' => $request->notes
+            ]);
 
-        if ($driverConflicts) {
-            $conflicts[] = 'Driver is already scheduled for this time slot';
+            Log::info("New schedule created and assigned to driver {$request->driver_id}");
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule assigned successfully',
+                'schedule' => $schedule->load(['route', 'bus', 'driver'])
+            ], 201);
+
+        } catch (\Exception $e) {
+            Log::error("Error assigning schedule: " . $e->getMessage());
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Error assigning schedule: ' . $e->getMessage()
+            ], 500);
         }
-
-        // Check bus conflicts
-        $busConflicts = Schedule::where('bus_id', $busId)
-            ->where('date', $date)
-            ->where(function ($query) use ($startTime, $endTime) {
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                      ->orWhereBetween('end_time', [$startTime, $endTime])
-                      ->orWhere(function ($overlapQuery) use ($startTime, $endTime) {
-                          $overlapQuery->where('start_time', '<=', $startTime)
-                                      ->where('end_time', '>=', $endTime);
-                      });
-            })
-            ->when($excludeScheduleId, function ($query) use ($excludeScheduleId) {
-                $query->where('id', '!=', $excludeScheduleId);
-            })
-            ->exists();
-
-        if ($busConflicts) {
-            $conflicts[] = 'Bus is already scheduled for this time slot';
-        }
-
-        return $conflicts;
     }
 }

@@ -26,7 +26,7 @@ Route::middleware('auth')->group(function () {
     // Panel routes
     Route::get('/panel/operator', [PanelController::class, 'operatorPanel'])->name('operator.panel');
     Route::get('/panel/notifications', [PanelController::class, 'notifications'])->name('notifications.panel');
-    Route::get('/panel/schedule', [ScheduleController::class, 'index'])->name('schedule.panel');
+    Route::get('/panel/schedule', [ScheduleController::class, 'schedulePanel'])->name('schedule.panel');
     Route::get('/panel/routes', [RouteController::class, 'index'])->name('routes.panel');
     Route::get('/panel/drivers', [DriverController::class, 'index'])->name('drivers.panel');
     Route::get('/panel/buses', [BusController::class, 'index'])->name('buses.panel');
@@ -37,7 +37,7 @@ Route::middleware('auth')->group(function () {
 
     // Schedule management routes
     Route::prefix('schedules')->group(function () {
-        Route::post('/', [ScheduleController::class, 'store'])->name('schedule.store');
+        Route::post('/', [ScheduleController::class, 'webStore'])->name('schedule.store');
         Route::get('/{id}', [ScheduleController::class, 'show'])->name('schedule.show');
         Route::put('/{id}', [ScheduleController::class, 'update'])->name('schedule.update');
         Route::delete('/{id}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');

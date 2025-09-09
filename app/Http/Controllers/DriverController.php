@@ -350,6 +350,42 @@ class DriverController extends Controller
         ]);
     }
 
+    public function lookupByEmail(Request $request): JsonResponse
+    {
+        $email = $request->input('email');
+        $driver = Driver::where('email', $email)->first();
+        
+        if (!$driver) {
+            return response()->json(['success' => false], 404);
+        }
+        
+        return response()->json([
+            'success' => true,
+            'driver' => ['id' => $driver->id, 'name' => $driver->name, 'email' => $driver->email]
+        ]);
+    }
+
+    public function driversPanel()
+    {
+        try {
+            $drivers = Driver::with(['schedules' => function($query) {
+                $query->with(['route', 'bus'])->orderBy('date', 'desc');
+            }])
+            ->orderBy('created_at', 'desc')
+            ->paginate(10);
+            
+            return view('panels.drivers', compact('drivers'));
+            
+        } catch (\Exception $e) {
+            Log::error("Error loading drivers panel: " . $e->getMessage());
+            
+            return view('panels.drivers', [
+                'drivers' => collect(),
+                'error' => 'Error loading drivers data'
+            ]);
+        }
+    }
+
     /**
      * Search drivers
      */

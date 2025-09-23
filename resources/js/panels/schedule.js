@@ -283,7 +283,7 @@ function hideModal(modalId) {
 
 // Modal functions for view and edit
 function viewSchedule(id) {
-    fetch(`/api/schedules/${id}`)
+    fetch(`/schedules/${id}`) 
         .then(response => response.json())
         .then(data => {
             const content = `
@@ -311,7 +311,7 @@ function viewSchedule(id) {
 }
 
 function editSchedule(id) {
-    fetch(`/api/schedules/${id}`)
+    fetch(`/schedules/${id}`) 
         .then(response => response.json())
         .then(data => {
             document.getElementById('edit_schedule_id').value = data.id;
@@ -383,31 +383,6 @@ function saveScheduleChanges() {
         saveBtn.disabled = false;
         saveText.textContent = originalText;
     });
-}
-
-function deleteSchedule(id) {
-    if (confirm('Are you sure you want to delete this schedule? This action cannot be undone.')) {
-        fetch(`/schedules/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast(data.message, 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showToast('Error deleting schedule: ' + (data.message || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showToast('Error deleting schedule', 'error');
-        });
-    }
 }
 
 // Clear filters functionality
@@ -505,6 +480,36 @@ function setupDatePlaceholder() {
     }
 }
 
+document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+    if (!scheduleToDelete) return;
+    fetch(`/schedules/${scheduleToDelete}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        showToast(data.message, data.success ? 'success' : 'error');
+        setTimeout(() => location.reload(), 1000);
+    })
+    .catch(error => {
+        showToast('Error deleting schedule', 'error');
+    })
+    .finally(() => {
+        scheduleToDelete = null;
+        document.getElementById('deleteAlert').classList.remove('show');
+        document.getElementById('deleteAlert').style.display = 'none';
+    });
+});
+
+document.getElementById('cancelDeleteBtn').addEventListener('click', function() {
+    scheduleToDelete = null;
+    document.getElementById('deleteAlert').classList.remove('show');
+    document.getElementById('deleteAlert').style.display = 'none';
+});
+
 // Make functions globally available
 window.updateRouteDetails = updateRouteDetails;
 window.updateFare = updateFare;
@@ -512,7 +517,6 @@ window.resetForm = resetForm;
 window.viewSchedule = viewSchedule;
 window.editSchedule = editSchedule;
 window.saveScheduleChanges = saveScheduleChanges;
-window.deleteSchedule = deleteSchedule;
 window.clearFilters = clearFilters;
 window.showModal = showModal;
 window.hideModal = hideModal;
@@ -533,6 +537,43 @@ document.addEventListener('DOMContentLoaded', function() {
     if (busSelect) {
         busSelect.addEventListener('change', updateFare);
     }
+
+    let scheduleToDelete = null;
+
+    function deleteSchedule(id) {
+        scheduleToDelete = id;
+        showModal('deleteScheduleModal');
+    }
+
+    window.deleteSchedule = deleteSchedule;
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
+        if (!scheduleToDelete) return;
+        fetch(`/schedules/${scheduleToDelete}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            showToast(data.message, data.success ? 'success' : 'error');
+            setTimeout(() => location.reload(), 1000);
+        })
+        .catch(error => {
+            showToast('Error deleting schedule', 'error');
+        })
+        .finally(() => {
+            scheduleToDelete = null;
+            hideModal('deleteScheduleModal');
+        });
+    });
+
+    document.getElementById('cancelDeleteBtn').addEventListener('click', function() {
+        scheduleToDelete = null;
+        hideModal('deleteScheduleModal');
+    });
     
     // Reset form button
     const resetFormBtn = document.getElementById('resetFormBtn');

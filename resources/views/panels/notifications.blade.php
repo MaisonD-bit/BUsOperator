@@ -21,7 +21,7 @@
     </div>
 
     <!-- Notifications Container -->
-    <div class="row">
+    <div class="row">  
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-light d-flex justify-content-between align-items-center">

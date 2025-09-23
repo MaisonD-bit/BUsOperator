@@ -11,7 +11,6 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         
-        // Redirect based on user role
         switch ($user->role) {
             case 'admin':
             case 'operator':

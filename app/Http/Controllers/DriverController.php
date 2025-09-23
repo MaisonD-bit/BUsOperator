@@ -601,64 +601,34 @@ public function profile($id)
      */
     public function loginFromApp(Request $request)
     {
-        try {
-            $validator = Validator::make($request->all(), [
-                'email' => 'required|email',
-                'password' => 'required|string',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid credentials format',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            $driver = Driver::where('email', $request->email)->first();
-
-            if (!$driver || !Hash::check($request->password, $driver->password)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Invalid credentials'
-                ], 401);
-            }
-
-            if ($driver->status !== 'active') {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Your account is not approved yet. Please wait for admin approval.'
-                ], 403);
-            }
-
-            // Update last login
-            $driver->update(['last_app_login' => now()]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Login successful',
-                'driver' => [
-                    'id' => $driver->id,
-                    'name' => $driver->name,
-                    'email' => $driver->email,
-                    'status' => $driver->status,
-                    'contact_number' => $driver->contact_number,
-                    'photo_url' => $driver->photo_url
-                ],
-                'token' => 'driver_' . $driver->id // Simple token for now
-            ], 200);
-
-        } catch (\Exception $e) {
-            Log::error('Driver login error', [
-                'error' => $e->getMessage(),
-                'email' => $request->email
-            ]);
-
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required|string'
+        ]);
+        if ($validator->fails()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Login failed. Please try again.'
-            ], 500);
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
         }
+
+        $driver = Driver::where('email', $request->email)->first();
+        if (!$driver || !\Illuminate\Support\Facades\Hash::check($request->password, $driver->password)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password'
+            ], 401);
+        }
+
+        return response()->json([
+            'success' => true,
+            'driver' => [
+                'id' => $driver->id,
+                'name' => $driver->name,
+                'email' => $driver->email
+            ]
+        ]);
     }
 
     /**

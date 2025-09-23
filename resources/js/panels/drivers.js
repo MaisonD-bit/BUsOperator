@@ -121,6 +121,22 @@ function hideDriverForm() {
     // Don't reset form - preserve data
 }
 
+function showModal(modalId) {
+    const modalEl = document.getElementById(modalId);
+    if (modalEl) {
+        const modal = new bootstrap.Modal(modalEl);
+        modal.show();
+    }
+}
+
+function hideModal(modalId) {
+    const modalEl = document.getElementById(modalId);
+    if (modalEl) {
+        const modal = bootstrap.Modal.getInstance(modalEl);
+        if (modal) modal.hide();
+    }
+}
+
 function toggleAddDriverForm() {
     const formSection = document.getElementById('addDriverFormSection');
     if (!formSection) return;
@@ -205,42 +221,6 @@ function editDriver(driverId) {
             // Restore previous form data on error
             restoreFormData();
         });
-}
-
-function deleteDriver(driverId) {
-    if (confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
-        const csrfToken = document.querySelector('meta[name="csrf-token"]');
-        if (!csrfToken) {
-            showToast('CSRF token not found', 'error');
-            return;
-        }
-
-        fetch(`/drivers/${driverId}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': csrfToken.getAttribute('content'),
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => {
-            if (!response.ok) {
-                throw new Error('Network response was not ok');
-            }
-            return response.json();
-        })
-        .then(data => {
-            if (data.success) {
-                showToast(data.message || 'Driver deleted successfully', 'success');
-                setTimeout(() => window.location.reload(), 1000);
-            } else {
-                throw new Error(data.message || 'Unknown error occurred');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showToast('Error deleting driver: ' + (error.message || 'Unknown error'), 'error');
-        });
-    }
 }
 
 function updateDriverStatus(driverId, newStatus) {
@@ -347,7 +327,7 @@ window.hideDriverForm = hideDriverForm;
 window.toggleAddDriverForm = toggleAddDriverForm;
 window.viewDriver = viewDriver;
 window.editDriver = editDriver;
-window.deleteDriver = deleteDriver;
+// window.deleteDriver = deleteDriver;
 window.updateDriverStatus = updateDriverStatus;
 window.toggleView = toggleView;
 window.clearFilters = clearFilters;
@@ -355,6 +335,16 @@ window.approveDriver = approveDriver;
 window.rejectDriver = rejectDriver;
 
 // DOMContentLoaded event
+
+let driverToDelete = null;
+
+function deleteDriver(driverId) {
+    driverToDelete = driverId;
+    showModal('deleteDriverModal');
+}
+
+window.deleteDriver = deleteDriver;
+
 document.addEventListener('DOMContentLoaded', function() {
     // Ensure CSRF token is available
     const csrfToken = document.querySelector('meta[name="csrf-token"]');
@@ -393,6 +383,35 @@ document.addEventListener('DOMContentLoaded', function() {
             showDriverForm();
         });
     }
+
+    document.getElementById('confirmDeleteDriverBtn').addEventListener('click', function() {
+        if (!driverToDelete) return;
+        const csrfToken = document.querySelector('meta[name="csrf-token"]');
+        fetch(`/drivers/${driverToDelete}`, {
+            method: 'DELETE',
+            headers: {
+                'X-CSRF-TOKEN': csrfToken.getAttribute('content'),
+                'Accept': 'application/json'
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            showToast(data.message || 'Driver deleted successfully', data.success ? 'success' : 'error');
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(error => {
+            showToast('Error deleting driver', 'error');
+        })
+        .finally(() => {
+            driverToDelete = null;
+            hideModal('deleteDriverModal');
+        });
+    });
+
+    document.getElementById('cancelDeleteDriverBtn').addEventListener('click', function() {
+        driverToDelete = null;
+        hideModal('deleteDriverModal');
+    });
     
     // Add First Driver buttons
     const addFirstDriverBtn = document.getElementById('addFirstDriverBtn');

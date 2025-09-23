@@ -417,27 +417,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 return response.json();
             })
             .then(data => {
-                if (data.success) {
+                if (data && data.success) {
                     showToast(data.message || 'Route saved successfully', 'success');
                     hideRouteForm();
-                    setTimeout(() => window.location.reload(), 1000);
+                    setTimeout(() => window.location.reload(), 500); // Faster reload
+                } else if (data && data.errors) {
+                    showValidationErrors(data.errors);
+                    showToast('Please fix the errors in the form.', 'error');
                 } else {
-                    throw new Error(data.message || 'Unknown error occurred');
+                    showToast(data.message || 'Unknown error occurred', 'error');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                if (error.errors) {
+                if (error && error.errors) {
                     showValidationErrors(error.errors);
+                    showToast('Please fix the errors in the form.', 'error');
+                } else if (error && error.message) {
+                    showToast(error.message, 'error');
                 } else {
-                    let errorMessage = 'Error saving route';
-                    if (error.errors) {
-                        const errors = Object.values(error.errors).flat();
-                        errorMessage = errors.join('\n');
-                    } else if (error.message) {
-                        errorMessage = error.message;
-                    }
-                    showToast(errorMessage, 'error');
+                    showToast('Error saving route', 'error');
                 }
             })
             .finally(() => {
@@ -465,7 +464,6 @@ window.centerMapToCebu = centerMapToCebu;
 window.calculateFare = calculateFare;
 window.clearStops = clearStops;
 
-// CRUD functions for AJAX
 function editRoute(id) {
     fetch(`/routes/${id}`)
         .then(res => res.json())
@@ -477,8 +475,8 @@ function editRoute(id) {
             document.getElementById('route_name').value = route.name;
             document.getElementById('start_location').value = route.start_location;
             document.getElementById('end_location').value = route.end_location;
-            document.getElementById('start_coordinates').value = route.start_coordinates;
-            document.getElementById('end_coordinates').value = route.end_coordinates;
+            // document.getElementById('start_coordinates').value = route.start_coordinates;
+            // document.getElementById('end_coordinates').value = route.end_coordinates;
             document.getElementById('distance_km').value = route.distance_km;
             document.getElementById('estimated_duration').value = route.estimated_duration;
             document.getElementById('regular_price').value = route.regular_price;
@@ -490,6 +488,7 @@ function editRoute(id) {
             // Optionally, re-render stops and route on map
         });
 }
+
 
 function deleteRoute(id) {
     if (!confirm('Are you sure you want to delete this route?')) return;

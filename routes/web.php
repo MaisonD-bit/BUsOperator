@@ -10,6 +10,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TerminalController;
 
 // Authentication routes (no auth middleware)
+Route::post('/login', [AuthController::class, 'login'])->name('login.post')->middleware('guest');
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login')->middleware('guest');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post')->middleware('guest');
 Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register')->middleware('guest');
@@ -37,7 +38,7 @@ Route::middleware('auth')->group(function () {
 
     // Schedule management routes
     Route::prefix('schedules')->group(function () {
-        Route::post('/', [ScheduleController::class, 'webStore'])->name('schedule.store');
+        Route::post('/', [ScheduleController::class, 'store'])->name('schedule.store');
         Route::get('/{id}', [ScheduleController::class, 'show'])->name('schedule.show');
         Route::put('/{id}', [ScheduleController::class, 'update'])->name('schedule.update');
         Route::delete('/{id}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');

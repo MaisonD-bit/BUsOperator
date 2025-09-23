@@ -156,7 +156,6 @@ class BusController extends Controller
         try {
             $bus = Bus::findOrFail($id);
             
-            // Check if bus has active schedules
             $activeSchedules = $bus->schedules()
                 ->whereIn('status', ['scheduled', 'active'])
                 ->where('date', '>=', now()->toDateString())

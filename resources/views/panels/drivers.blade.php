@@ -93,48 +93,6 @@
         </div>
 
         <div class="card-body p-4">
-            <!-- Search and Filters -->
-            <div class="row mb-4">
-                <div class="col-md-4 mb-2">
-                    <div class="input-group">
-                        <span class="input-group-text bg-light">
-                            <i class="fas fa-search text-muted"></i>
-                        </span>
-                        <input type="text" id="driverSearch" class="form-control" placeholder="Search drivers...">
-                    </div>
-                </div>
-                <div class="col-md-2 mb-2">
-                    <select id="statusFilter" class="form-select">
-                        <option value="all">All Status</option>
-                        <option value="active">Active</option>
-                        <option value="inactive">Inactive</option>
-                        <option value="suspended">Suspended</option>
-                        <option value="pending">Pending</option>
-                        <option value="rejected">Rejected</option>
-                    </select>
-                </div>
-                <div class="col-md-2 mb-2">
-                    <select id="sourceFilter" class="form-select">
-                        <option value="all">All Sources</option>
-                        <option value="web">Web Registered</option>
-                        <option value="app">App Registered</option>
-                    </select>
-                </div>
-                <div class="col-md-2 mb-2">
-                    <select id="routeFilter" class="form-select">
-                        <option value="all">All Routes</option>
-                        @foreach($routes ?? [] as $route)
-                        <option value="{{ $route->id }}">{{ $route->name }}</option>
-                        @endforeach
-                    </select>
-                </div>
-                <div class="col-md-2 mb-2">
-                    <button class="btn btn-outline-secondary w-100" id="clearFiltersBtn">
-                        <i class="fas fa-filter-circle-xmark"></i> Clear
-                    </button>
-                </div>
-            </div>
-
             <!-- Grid View -->
             <div id="gridView">
                 <div class="row g-3">
@@ -531,6 +489,23 @@
             </form>
         </div>
     </div>
+</div>
+<div class="modal fade" id="deleteDriverModal" tabindex="-1" aria-labelledby="deleteDriverModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header bg-danger text-white">
+        <h5 class="modal-title" id="deleteDriverModalLabel">Delete Driver</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        Are you sure you want to delete this driver?
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" id="cancelDeleteDriverBtn" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-danger" id="confirmDeleteDriverBtn">Delete</button>
+      </div>
+    </div>
+  </div>
 </div>
 @endsection
 

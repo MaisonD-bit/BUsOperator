@@ -6,6 +6,7 @@ use App\Models\Bus;
 use App\Models\Route;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Models\Driver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -19,13 +20,15 @@ class TerminalController extends Controller
     public function index()
     {
         try {
-            // Ensure we have test data
             $this->ensureTestData();
-            
+
             $routes = Route::where('status', 'active')->get();
-            $drivers = User::where('role', 'driver')->where('status', 'active')->get();
+            $drivers = Driver::where('status', 'active')
+                ->select('id', 'name', 'email')
+                ->orderBy('name')
+                ->get();
             $buses = Bus::where('status', 'active')->get();
-            
+
             return view('panels.terminal', compact('routes', 'drivers', 'buses'));
         } catch (\Exception $e) {
             Log::error('Terminal index error: ' . $e->getMessage());

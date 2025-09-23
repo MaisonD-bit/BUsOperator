@@ -73,34 +73,51 @@ class RouteController extends Controller
      */
     public function show($id)
     {
-        try {
-            $route = BusRoute::with(['schedules.driver', 'stops'])->findOrFail($id);
+        $route = BusRoute::with(['stops'])->findOrFail($id);
 
-            return response()->json([
-                'success' => true,
-                'route' => [
-                    'id' => $route->id,
-                    'name' => $route->name,
-                    'code' => $route->code,
-                    'start_location' => $route->start_location,
-                    'end_location' => $route->end_location,
-                    'description' => $route->description,
-                    'regular_price' => $route->regular_price,
-                    'aircon_price' => $route->aircon_price,
-                    'distance_km' => $route->distance_km,
-                    'estimated_duration' => $route->estimated_duration,
-                    'status' => $route->status,
-                    'schedules' => $route->schedules,
-                    'stops' => $route->stops
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Route not found'
-            ], 404);
+        // Parse geometry if needed
+        $geometry = [];
+        if ($route->geometry) {
+            try {
+                $geometry = json_decode($route->geometry, true);
+            } catch (\Exception $e) {
+                $geometry = [];
+            }
         }
+
+        // Parse stops
+        $stopsArr = [];
+        if ($route->relationLoaded('stops') && $route->stops) {
+            $stopsArr = $route->stops->map(function($stop) {
+                return [
+                    'name' => $stop->name ?? '',
+                    'lat' => $stop->lat ?? null,
+                    'lng' => $stop->lng ?? null,
+                    'stop_order' => $stop->stop_order ?? null
+                ];
+            })->toArray();
+        }
+
+        return response()->json([
+            'success' => true,
+            'route' => [
+                'id' => $route->id,
+                'name' => $route->name,
+                'code' => $route->code,
+                'start_location' => $route->start_location,
+                'end_location' => $route->end_location,
+                'start_coordinates' => $route->start_coordinates ?? '',
+                'end_coordinates' => $route->end_coordinates ?? '',
+                'description' => $route->description,
+                'regular_price' => $route->regular_price,
+                'aircon_price' => $route->aircon_price,
+                'distance_km' => $route->distance_km,
+                'estimated_duration' => $route->estimated_duration,
+                'status' => $route->status,
+                'geometry_data' => $geometry,
+                'stops_data' => $stopsArr
+            ]
+        ]);
     }
 
     /**

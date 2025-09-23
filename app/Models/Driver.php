@@ -10,7 +10,7 @@ class Driver extends Authenticatable
     protected $fillable = [
         'name',
         'email',
-        'password', // Add for app login
+        'password', 
         'contact_number',
         'date_of_birth',
         'gender',
@@ -23,7 +23,7 @@ class Driver extends Authenticatable
         'status',
         'notes',
         'photo_url',
-        'app_registered', // Track if registered from app
+        'app_registered', 
     ];
 
     protected $hidden = [
@@ -36,13 +36,11 @@ class Driver extends Authenticatable
         'app_registered' => 'boolean',
     ];
 
-    // Set default attributes
     protected $attributes = [
         'status' => 'active',
         'app_registered' => false,
     ];
 
-    // Relationships
     public function schedules()
     {
         return $this->hasMany(Schedule::class);

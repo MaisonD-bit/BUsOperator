@@ -15,32 +15,41 @@ use Carbon\Carbon;
 
 class ScheduleController extends Controller
 {
-    // ===================================
-    // WEB METHODS (return blade views)
-    // ===================================
-    
-    /**
-     * Display the schedule panel (WEB)
-     */
     public function schedulePanel()
     {
         try {
             $routes = Route::all();
             $buses = Bus::all();
-            $drivers = Driver::all(); // Add this line
-            $schedules = Schedule::with(['route', 'bus', 'driver'])
-                                ->orderBy('date', 'desc')
-                                ->paginate(10);
-            
+            $drivers = Driver::all();
+
+            // Start query builder
+            $query = Schedule::with(['route', 'bus', 'driver']);
+
+            // Apply filters if present
+            if (request()->filled('driver')) {
+                $query->where('driver_id', request('driver'));
+            }
+            if (request()->filled('route')) {
+                $query->where('route_id', request('route'));
+            }
+            if (request()->filled('date')) {
+                $query->whereDate('date', request('date'));
+            }
+            if (request()->filled('status')) {
+                $query->where('status', request('status'));
+            }
+
+            $schedules = $query->orderBy('date', 'desc')->paginate(10);
+
             return view('panels.schedule', compact('routes', 'buses', 'drivers', 'schedules'));
-            
+
         } catch (\Exception $e) {
             Log::error("Error loading schedule panel: " . $e->getMessage());
-            
+
             return view('panels.schedule', [
                 'routes' => collect(),
                 'buses' => collect(),
-                'drivers' => collect(), // Add this line
+                'drivers' => collect(),
                 'schedules' => collect(),
                 'error' => 'Error loading schedule data'
             ]);
@@ -50,7 +59,7 @@ class ScheduleController extends Controller
     /**
      * Store a new schedule (WEB)
      */
-    public function webStore(Request $request)
+    public function store(Request $request)
     {
         try {
             $validated = $request->validate([
@@ -81,7 +90,7 @@ class ScheduleController extends Controller
                 'date' => $validated['date'],
                 'start_time' => $validated['start_time'],
                 'end_time' => $validated['end_time'],
-                'status' => $validated['status'],
+                'status' => 'scheduled', // <-- force status to 'scheduled'
                 'fare_regular' => $fare_regular,
                 'fare_aircon' => $fare_aircon,
                 'notes' => $validated['notes']
@@ -125,13 +134,11 @@ class ScheduleController extends Controller
     /**
      * Display a specific schedule (WEB)
      */
-    public function webShow($id)
+    public function show($id)
     {
         try {
             $schedule = Schedule::with(['driver', 'route', 'bus'])->findOrFail($id);
-            
             return response()->json($schedule);
-            
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -143,7 +150,7 @@ class ScheduleController extends Controller
     /**
      * Update a schedule (WEB)
      */
-    public function webUpdate(Request $request, $id)
+    public function update(Request $request, $id)
     {
         try {
             $schedule = Schedule::findOrFail($id);
@@ -188,7 +195,7 @@ class ScheduleController extends Controller
     /**
      * Delete a schedule (WEB)
      */
-    public function webDestroy($id)
+    public function destroy($id)
     {
         try {
             $schedule = Schedule::findOrFail($id);
@@ -259,8 +266,6 @@ class ScheduleController extends Controller
     public function getDriverSchedules($driverId): JsonResponse
     {
         try {
-            Log::info("Fetching schedules for driver ID: {$driverId}");
-
             $driver = Driver::find($driverId);
             if (!$driver) {
                 return response()->json([
@@ -270,16 +275,15 @@ class ScheduleController extends Controller
             }
 
             $today = Carbon::now()->format('Y-m-d');
-            
-            // Get all schedules for this driver from today onwards
+
+            // Get all schedules for this driver (including scheduled, accepted, active, completed)
             $allSchedules = Schedule::with(['route', 'bus'])
                 ->where('driver_id', $driverId)
-                ->where('date', '>=', $today)
                 ->orderBy('date', 'asc')
                 ->orderBy('start_time', 'asc')
                 ->get();
 
-            // Categorize schedules properly
+            // Categorize schedules
             $todaySchedules = $allSchedules->filter(function($schedule) use ($today) {
                 return $schedule->date === $today;
             })->values();
@@ -288,18 +292,6 @@ class ScheduleController extends Controller
                 return $schedule->date > $today;
             })->values();
 
-            // Calculate summary with proper counts
-            $summary = [
-                'total_upcoming' => $allSchedules->whereIn('status', ['scheduled', 'accepted'])->count(),
-                'today_schedules' => $todaySchedules->count(),
-                'future_schedules' => $upcomingSchedules->count(),
-                'accepted_today' => $todaySchedules->where('status', 'accepted')->count(),
-                'active_today' => $todaySchedules->where('status', 'active')->count(),
-                'completed_today' => $todaySchedules->where('status', 'completed')->count()
-            ];
-
-            Log::info("Found schedules - Today: {$summary['today_schedules']}, Future: {$summary['future_schedules']}");
-
             return response()->json([
                 'success' => true,
                 'driver' => [
@@ -307,18 +299,13 @@ class ScheduleController extends Controller
                     'name' => $driver->name,
                     'email' => $driver->email
                 ],
-                'summary' => $summary,
                 'schedules' => [
                     'today' => $todaySchedules,
                     'upcoming' => $upcomingSchedules,
                     'all' => $allSchedules->values()
                 ]
             ]);
-
         } catch (\Exception $e) {
-            Log::error("Error fetching driver schedules: " . $e->getMessage());
-            Log::error($e->getTraceAsString());
-
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching schedules: ' . $e->getMessage()
@@ -329,22 +316,33 @@ class ScheduleController extends Controller
     /**
      * Accept a schedule (API)
      */
-    public function acceptSchedule($id)
+    public function acceptSchedule(Request $request, $id)
     {
         try {
             $schedule = Schedule::findOrFail($id);
+
+            // Ensure the driver is assigned to this schedule
+            // if ($schedule->driver_id !== auth()->id()) {
+            //     return response()->json([
+            //         'success' => false,
+            //         'message' => 'You are not authorized to accept this schedule.'
+            //     ], 403);
+            // }
+
+            // Update the schedule status to 'accepted'
             $schedule->status = 'accepted';
             $schedule->save();
 
             return response()->json([
                 'success' => true,
-                'message' => 'Schedule accepted successfully',
+                'message' => 'Schedule accepted successfully.',
                 'schedule' => $schedule
             ]);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to accept schedule: ' . $e->getMessage()
+                'message' => 'Failed to accept schedule.',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -377,6 +375,13 @@ class ScheduleController extends Controller
         try {
             Log::info("Attempting to start schedule ID: {$scheduleId}");
 
+            $schedule = Schedule::find($scheduleId);
+
+            if (!$schedule) {
+                Log::error("Schedule not found: $scheduleId");
+                return response()->json(['error' => 'Schedule not found'], 404);
+            }
+
             $schedule = Schedule::with(['route', 'bus', 'driver'])->find($scheduleId);
 
             if (!$schedule) {
@@ -393,13 +398,13 @@ class ScheduleController extends Controller
                 ], 400);
             }
 
-            $today = Carbon::now()->format('Y-m-d');
-            if ($schedule->date !== $today) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Schedule can only be started on the scheduled date'
-                ], 400);
-            }
+            // $today = Carbon::now()->format('Y-m-d');
+            // if (trim($schedule->date) != trim($today)) {
+            //     return response()->json([
+            //         'success' => false,
+            //         'message' => 'Schedule can only be started on the scheduled date'
+            //     ], 400);
+            // }
 
             $schedule->status = 'active';
             $schedule->started_at = Carbon::now();
@@ -433,13 +438,15 @@ class ScheduleController extends Controller
             Log::info("Attempting to complete schedule ID: {$scheduleId}");
 
             $schedule = Schedule::with(['route', 'bus', 'driver'])->find($scheduleId);
-
+            
             if (!$schedule) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Schedule not found'
                 ], 404);
             }
+
+            Log::info("DEBUG: Schedule date={$schedule->date}, Today=" . Carbon::now()->format('Y-m-d'));
 
             if ($schedule->status !== 'active') {
                 return response()->json([

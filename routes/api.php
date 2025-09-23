@@ -1,5 +1,4 @@
 <?php
-// filepath: c:\Users\User\Desktop\Laravel BusOp\BusOperator\routes\api.php
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -9,24 +8,20 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\BusController;
 
-// Public API routes (no authentication required)
 Route::prefix('v1')->group(function () {
     
-    // Authentication routes for mobile app
     Route::post('/auth/login', [AuthController::class, 'apiLogin']);
+
+    Route::post('/drivers/login', [DriverController::class, 'loginFromApp']);
     Route::post('/auth/register', [AuthController::class, 'apiRegister']);
     Route::post('/auth/logout', [AuthController::class, 'apiLogout']);
     Route::get('/auth/user', [AuthController::class, 'getAuthenticatedUser']);
     
-    // Driver routes for mobile app
     Route::prefix('drivers')->group(function () {
-        // Get driver schedules
         Route::get('/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
         
-        // Get driver profile
         Route::get('/{id}', [DriverController::class, 'show']);
 
-        // ADD THIS LINE - Driver registration from mobile app
         Route::post('/register', [DriverController::class, 'registerFromApp']);
         
         // Update driver status
@@ -73,7 +68,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
     });
     
     // Web panel API routes
-    Route::get('/schedules/{id}', [ScheduleController::class, 'webShow']);
+    Route::get('/schedules/{id}', [ScheduleController::class, 'show']);
     Route::get('/drivers/{id}', [DriverController::class, 'show']);
 });
 
@@ -84,7 +79,7 @@ Route::group(['middleware' => 'api'], function () {
     Route::get('drivers/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
     
     // Schedule actions
-    Route::put('schedules/{id}/accept', [ScheduleController::class, 'acceptSchedule']);
+    Route::post('schedules/{id}/accept', [ScheduleController::class, 'acceptSchedule']);
     Route::put('schedules/{id}/decline', [ScheduleController::class, 'declineSchedule']);
     Route::put('schedules/{id}/start', [ScheduleController::class, 'startSchedule']);
     Route::put('schedules/{id}/complete', [ScheduleController::class, 'completeSchedule']);

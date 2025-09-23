@@ -11,6 +11,23 @@
             <h2 class="mb-0 fw-bold">Schedule Management</h2>
         </div>
         <!-- Toggle Button for Route Assignment -->
+         <div class="modal fade" id="deleteScheduleModal" tabindex="-1" aria-labelledby="deleteScheduleModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+                <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="deleteScheduleModalLabel">Delete Schedule</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Are you sure you want to delete this schedule?
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="cancelDeleteBtn">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">Delete</button>
+                </div>
+                </div>
+            </div>
+            </div>
         <button type="button" class="btn btn-sm btn-outline-primary ms-2 active" id="toggleScheduleFormBtn">
             <i class="fas fa-plus me-2"></i>Create New Schedule
         </button>

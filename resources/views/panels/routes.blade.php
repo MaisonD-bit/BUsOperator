@@ -41,9 +41,6 @@
                         <i class="fas fa-times me-1"></i> Clear
                     </a>
                 </div>
-                <div class="col-md-2 d-flex align-items-end">
-                    <small class="text-muted">{{ $routes->total() ?? 0 }} routes found</small>
-                </div>
             </form>
         </div>
     </div>

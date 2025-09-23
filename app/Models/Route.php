@@ -22,6 +22,7 @@ class Route extends Model
         'regular_price',
         'aircon_price',
         'status',
+        'geometry',
         'geometry_data',
         'stops_data'
     ];
@@ -38,5 +39,12 @@ class Route extends Model
     public function schedules()
     {
         return $this->hasMany(Schedule::class);
+    }
+
+    public function stops()
+    {
+        return $this->belongsToMany(Stop::class, 'route_stops', 'route_id', 'stop_id')
+            ->withPivot('stop_order', 'estimated_minutes')
+            ->orderBy('route_stops.stop_order');
     }
 }

@@ -39,6 +39,11 @@ class CreateRoutesTable extends Migration
 
     public function down()
     {
+        if (Schema::hasTable('schedules')) {
+            Schema::table('schedules', function (Blueprint $table) {
+                $table->dropForeign(['route_id']);
+            });
+        }
         Schema::dropIfExists('route_stops');
         Schema::dropIfExists('routes');
     }

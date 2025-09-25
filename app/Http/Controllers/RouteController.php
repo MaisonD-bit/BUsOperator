@@ -41,6 +41,7 @@ class RouteController extends Controller
             'distance_km' => 'required|numeric|min:0',
             'estimated_duration' => 'required|integer|min:1',
             'status' => 'required|string|in:active,inactive',
+            'geometry' => 'required|string',
         ]);
 
         if ($validator->fails()) {
@@ -73,51 +74,53 @@ class RouteController extends Controller
      */
     public function show($id)
     {
-        $route = BusRoute::with(['stops'])->findOrFail($id);
+        try {
+            $route = BusRoute::with(['stops'])->findOrFail($id);
 
-        // Parse geometry if needed
-        $geometry = [];
-        if ($route->geometry) {
-            try {
-                $geometry = json_decode($route->geometry, true);
-            } catch (\Exception $e) {
-                $geometry = [];
+            // Return geometry AS RAW STRING (do NOT parse it)
+            $geometry = $route->geometry ?? '';
+
+            // Parse stops for display
+            $stopsArr = [];
+            if ($route->relationLoaded('stops') && $route->stops) {
+                $stopsArr = $route->stops->map(function($stop) {
+                    return [
+                        'name' => $stop->name ?? '',
+                        'lat' => $stop->lat ?? null,
+                        'lng' => $stop->lng ?? null,
+                        'stop_order' => $stop->stop_order ?? null
+                    ];
+                })->toArray();
             }
-        }
 
-        // Parse stops
-        $stopsArr = [];
-        if ($route->relationLoaded('stops') && $route->stops) {
-            $stopsArr = $route->stops->map(function($stop) {
-                return [
-                    'name' => $stop->name ?? '',
-                    'lat' => $stop->lat ?? null,
-                    'lng' => $stop->lng ?? null,
-                    'stop_order' => $stop->stop_order ?? null
-                ];
-            })->toArray();
+            return response()->json([
+                'success' => true,
+                'route' => [
+                    'id' => $route->id,
+                    'name' => $route->name,
+                    'code' => $route->code,
+                    'start_location' => $route->start_location,
+                    'end_location' => $route->end_location,
+                    'start_coordinates' => $route->start_coordinates ?? '',
+                    'end_coordinates' => $route->end_coordinates ?? '',
+                    'description' => $route->description,
+                    'regular_price' => $route->regular_price,
+                    'aircon_price' => $route->aircon_price,
+                    'distance_km' => $route->distance_km,
+                    'estimated_duration' => $route->estimated_duration,
+                    'status' => $route->status,
+                    'geometry' => $geometry,        // ← CHANGED: 'geometry' (raw string)
+                    'stops_data' => $stopsArr
+                ]
+            ]);
+        } catch (\Exception $e) {
+            // Log the actual error
+            \Log::error('Route show error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Route not found'
+            ], 404);
         }
-
-        return response()->json([
-            'success' => true,
-            'route' => [
-                'id' => $route->id,
-                'name' => $route->name,
-                'code' => $route->code,
-                'start_location' => $route->start_location,
-                'end_location' => $route->end_location,
-                'start_coordinates' => $route->start_coordinates ?? '',
-                'end_coordinates' => $route->end_coordinates ?? '',
-                'description' => $route->description,
-                'regular_price' => $route->regular_price,
-                'aircon_price' => $route->aircon_price,
-                'distance_km' => $route->distance_km,
-                'estimated_duration' => $route->estimated_duration,
-                'status' => $route->status,
-                'geometry_data' => $geometry,
-                'stops_data' => $stopsArr
-            ]
-        ]);
     }
 
     /**
@@ -138,6 +141,7 @@ class RouteController extends Controller
             'distance_km' => 'numeric|min:0',
             'estimated_duration' => 'integer|min:1',
             'status' => 'string|in:active,inactive',
+            'geometry' => 'required|string',
         ]);
 
         if ($validator->fails()) {

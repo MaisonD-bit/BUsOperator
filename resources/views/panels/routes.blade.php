@@ -63,7 +63,7 @@
                 <input type="hidden" id="start_coordinates" name="start_coordinates" value="123.920994,10.311008">
                 <input type="hidden" id="end_coordinates" name="end_coordinates">
                 <input type="hidden" id="stops_data" name="stops_data">
-                <input type="hidden" id="geometry_data" name="geometry_data">
+                <input type="hidden" id="geometry" name="geometry">
 
                 <div class="row">
                     <div class="col-md-6 mb-3">
@@ -153,6 +153,7 @@
                         <div class="invalid-feedback" id="end_location_error"></div>
                     </div>
                 </div>
+                
 
                 <!-- Route Information -->
                 <div class="row mb-3">

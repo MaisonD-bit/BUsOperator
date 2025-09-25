@@ -6,7 +6,7 @@ use Illuminate\Support\Facades\Schema;
 
 class CreateRoutesTable extends Migration
 {
-    public function up()
+     public function up()
     {
         Schema::create('routes', function (Blueprint $table) {
             $table->id();
@@ -14,13 +14,16 @@ class CreateRoutesTable extends Migration
             $table->string('code')->unique();
             $table->string('start_location');
             $table->string('end_location');
+            $table->string('start_coordinates')->nullable();
+            $table->string('end_coordinates')->nullable();
+            $table->text('stops_data')->nullable(); 
             $table->text('description')->nullable();
-            $table->decimal('regular_price', 8, 2)->comment('Price in Philippine Pesos for regular buses');
-            $table->decimal('aircon_price', 8, 2)->nullable()->comment('Price in Philippine Pesos for air-conditioned buses');
-            $table->decimal('distance_km', 8, 2)->nullable()->comment('Route distance in kilometers');
-            $table->integer('estimated_duration')->nullable()->comment('Total estimated duration in minutes');
+            $table->decimal('regular_price', 8, 2);
+            $table->decimal('aircon_price', 8, 2)->nullable();
+            $table->decimal('distance_km', 8, 2)->nullable();
+            $table->integer('estimated_duration')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('active');
-            $table->text('geometry')->nullable()->comment('GeoJSON LineString for the route');
+            $table->text('geometry')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });

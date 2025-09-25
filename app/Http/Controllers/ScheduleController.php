@@ -398,14 +398,6 @@ class ScheduleController extends Controller
                 ], 400);
             }
 
-            // $today = Carbon::now()->format('Y-m-d');
-            // if (trim($schedule->date) != trim($today)) {
-            //     return response()->json([
-            //         'success' => false,
-            //         'message' => 'Schedule can only be started on the scheduled date'
-            //     ], 400);
-            // }
-
             $schedule->status = 'active';
             $schedule->started_at = Carbon::now();
             $schedule->save();

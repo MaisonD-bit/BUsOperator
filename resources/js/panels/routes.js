@@ -203,6 +203,7 @@ window.clearStops = function() {
 
 function calculateRouteWithStops() {
     if (!endMarker) return;
+
     let coordinates = [CEBU_NORTH_TERMINAL.coordinates];
     stops.forEach(stop => {
         coordinates.push([stop.lng, stop.lat]);
@@ -210,11 +211,18 @@ function calculateRouteWithStops() {
     coordinates.push([endMarker.getLngLat().lng, endMarker.getLngLat().lat]);
 
     let coordsStr = coordinates.map(coord => coord.join(',')).join(';');
+    
+    // ✅ FIXED: Remove extra spaces in URL
     fetch(`https://api.mapbox.com/directions/v5/mapbox/driving/${coordsStr}?geometries=geojson&steps=true&overview=full&access_token=${mapboxgl.accessToken}`)
-        .then(response => response.json())
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Mapbox API error: ${response.status} ${response.statusText}`);
+            }
+            return response.json();
+        })
         .then(data => {
             if (data.routes && data.routes.length > 0) {
-                const route = data.routes[0];
+                const route = data.routes[0]; // ✅ 'route' is defined here
                 const distanceKm = (route.distance / 1000);
                 const durationMins = Math.round(route.duration / 60);
 
@@ -224,7 +232,8 @@ function calculateRouteWithStops() {
                 calculateFare();
                 drawRoute(route.geometry);
 
-                document.getElementById('geometry_data').value = JSON.stringify(route.geometry);
+                // ✅ FIXED: Use 'geometry' (not 'geometry_data')
+                document.getElementById('geometry').value = JSON.stringify(route.geometry);
 
                 const bounds = route.geometry.coordinates.reduce(function (bounds, coord) {
                     return bounds.extend(coord);
@@ -301,7 +310,7 @@ function clearEndPoint() {
     document.getElementById('suggested_aircon').value = '';
     document.getElementById('regular_price').value = '';
     document.getElementById('aircon_price').value = '';
-    document.getElementById('geometry_data').value = '';
+    document.getElementById('geometry').value = '';
     showToast('Destination cleared. Click on map to set new destination.', 'info');
 }
 
@@ -331,6 +340,10 @@ function showAddRouteForm() {
     setTimeout(() => {
         initializeMap();
         showToast('Click on the map to select destination from North Terminal', 'info');
+        
+        // Clear any existing geometry
+        document.getElementById('geometry').value = '';
+        document.getElementById('stops_data').value = '[]';
     }, 100);
 }
 
@@ -385,13 +398,20 @@ document.addEventListener('DOMContentLoaded', function() {
     if (form) {
         form.addEventListener('submit', function(e) {
             e.preventDefault();
+
             if (!document.getElementById('end_location').value) {
                 showToast('Please select a destination on the map.', 'error');
                 return;
             }
+
+            if (!document.getElementById('geometry').value) {
+                showToast('Please calculate the route first by clicking on the map.', 'error');
+                return;
+            }
+
             const formData = new FormData(form);
             formData.set('stops_data', JSON.stringify(stops));
-            formData.set('geometry_data', document.getElementById('geometry_data').value);
+            formData.set('geometry', document.getElementById('geometry').value);
             const saveBtn = document.getElementById('saveRouteBtn');
             const originalText = saveBtn.innerHTML;
             const routeId = document.getElementById('route_id').value;
@@ -444,6 +464,8 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveBtn.innerHTML = originalText;
             });
         });
+
+        console.log('Submitting geometry:', document.getElementById('geometry').value);
     }
     // Close modal when clicking outside
     const viewModal = document.getElementById('viewRouteModal');
@@ -468,27 +490,83 @@ function editRoute(id) {
     fetch(`/routes/${id}`)
         .then(res => res.json())
         .then(route => {
-            showAddRouteForm();
-            document.getElementById('route_id').value = route.id;
+            if (!route.success || !route.route) {
+                showToast('Failed to load route details', 'error');
+                return;
+            }
+
+            showAddRouteForm(); // This initializes the map
+
+            // Set form values
+            document.getElementById('route_id').value = route.route.id;
             document.getElementById('method_field').value = 'PUT';
-            document.getElementById('route_code').value = route.code;
-            document.getElementById('route_name').value = route.name;
-            document.getElementById('start_location').value = route.start_location;
-            document.getElementById('end_location').value = route.end_location;
-            // document.getElementById('start_coordinates').value = route.start_coordinates;
-            // document.getElementById('end_coordinates').value = route.end_coordinates;
-            document.getElementById('distance_km').value = route.distance_km;
-            document.getElementById('estimated_duration').value = route.estimated_duration;
-            document.getElementById('regular_price').value = route.regular_price;
-            document.getElementById('aircon_price').value = route.aircon_price;
-            document.getElementById('route_status').value = route.status;
-            document.getElementById('description').value = route.description || '';
-            document.getElementById('geometry_data').value = JSON.stringify(route.geometry_data || {});
-            document.getElementById('stops_data').value = JSON.stringify(route.stops_data || []);
-            // Optionally, re-render stops and route on map
+            document.getElementById('route_code').value = route.route.code || '';
+            document.getElementById('route_name').value = route.route.name || '';
+            document.getElementById('start_location').value = route.route.start_location || '';
+            document.getElementById('end_location').value = route.route.end_location || '';
+            document.getElementById('start_coordinates').value = route.route.start_coordinates || '';
+            document.getElementById('end_coordinates').value = route.route.end_coordinates || '';
+            document.getElementById('distance_km').value = route.route.distance_km || '';
+            document.getElementById('estimated_duration').value = route.route.estimated_duration || '';
+            document.getElementById('regular_price').value = route.route.regular_price || '';
+            document.getElementById('aircon_price').value = route.route.aircon_price || '';
+            document.getElementById('route_status').value = route.route.status || 'active';
+            document.getElementById('description').value = route.route.description || '';
+            document.getElementById('geometry').value = route.route.geometry || '';   
+            document.getElementById('stops_data').value = JSON.stringify(route.route.stops_data || []);
+
+            // Restore destination marker
+            if (route.route.end_coordinates) {
+                const [lng, lat] = route.route.end_coordinates.split(',').map(Number);
+                if (!isNaN(lng) && !isNaN(lat)) {
+                    setTimeout(() => {
+                        if (routeMap) {
+                            // Remove existing end marker if any
+                            if (endMarker) {
+                                endMarker.remove();
+                            }
+                            // Create new end marker
+                            endMarker = new mapboxgl.Marker({ color: 'red' })
+                                .setLngLat([lng, lat])
+                                .addTo(routeMap);
+                            
+                            // Restore stops
+                            stops = route.route.stops_data || [];
+                            stopMarkers = [];
+                            stops.forEach(stop => {
+                                if (stop.lng && stop.lat) {
+                                    const marker = new mapboxgl.Marker({ color: 'blue' })
+                                        .setLngLat([stop.lng, stop.lat])
+                                        .setPopup(new mapboxgl.Popup().setText(`Stop: ${stop.name || ''}`))
+                                        .addTo(routeMap);
+                                    stopMarkers.push(marker);
+                                }
+                            });
+                            updateStopsList();
+
+                            if (route.route.geometry) {
+                                try {
+                                    const geoJson = JSON.parse(route.route.geometry);
+                                    if (geoJson && geoJson.coordinates && geoJson.coordinates.length >= 2) {
+                                        drawRoute(geoJson);
+                                        const bounds = new mapboxgl.LngLatBounds();
+                                        geoJson.coordinates.forEach(coord => bounds.extend(coord));
+                                        routeMap.fitBounds(bounds, { padding: 40 });
+                                    }
+                                } catch (e) {
+                                    console.error('Invalid geometry:', e);
+                                }
+                            }
+                        }
+                    }, 300); 
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading route:', error);
+            showToast('Failed to load route details', 'error');
         });
 }
-
 
 function deleteRoute(id) {
     if (!confirm('Are you sure you want to delete this route?')) return;
@@ -513,33 +591,39 @@ function viewRoute(id) {
     fetch(`/routes/${id}`)
         .then(res => res.json())
         .then(route => {
+            if (!route.success || !route.route) {
+                showToast('Failed to load route details', 'error');
+                return;
+            }
+
             let stopsHtml = '';
-            if (route.stops_data && route.stops_data.length) {
+            if (route.route.stops_data && route.route.stops_data.length) {
                 stopsHtml = '<ol class="mb-0 ps-3">';
-                route.stops_data.forEach((stop, idx) => {
-                    stopsHtml += `<li class="mb-1">${stop.name}</li>`;
+                route.route.stops_data.forEach((stop, idx) => {
+                    stopsHtml += `<li class="mb-1">${stop.name || stop}</li>`;
                 });
                 stopsHtml += '</ol>';
             } else {
                 stopsHtml = '<em>No stops for this route.</em>';
             }
+
             document.getElementById('viewRouteContent').innerHTML = `
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <h6 class="fw-bold mb-3"><i class="fas fa-info-circle me-2"></i>General Info</h6>
-                        <div class="mb-2"><strong>Code:</strong> ${route.code}</div>
-                        <div class="mb-2"><strong>Name:</strong> ${route.name}</div>
-                        <div class="mb-2"><strong>Status:</strong> <span class="badge ${route.status === 'active' ? 'bg-success' : 'bg-secondary'}">${route.status}</span></div>
-                        <div class="mb-2"><strong>Description:</strong> ${route.description || '-'}</div>
+                        <div class="mb-2"><strong>Code:</strong> ${route.route.code || 'N/A'}</div>
+                        <div class="mb-2"><strong>Name:</strong> ${route.route.name || 'N/A'}</div>
+                        <div class="mb-2"><strong>Status:</strong> <span class="badge ${route.route.status === 'active' ? 'bg-success' : 'bg-secondary'}">${route.route.status || 'inactive'}</span></div>
+                        <div class="mb-2"><strong>Description:</strong> ${route.route.description || '-'}</div>
                     </div>
                     <div class="col-md-6 mb-3">
                         <h6 class="fw-bold mb-3"><i class="fas fa-route me-2"></i>Route Details</h6>
-                        <div class="mb-2"><strong>Start:</strong> ${route.start_location}</div>
-                        <div class="mb-2"><strong>End:</strong> ${route.end_location}</div>
-                        <div class="mb-2"><strong>Distance:</strong> ${route.distance_km} km</div>
-                        <div class="mb-2"><strong>Duration:</strong> ${route.estimated_duration} mins</div>
-                        <div class="mb-2"><strong>Regular Fare:</strong> ₱${route.regular_price}</div>
-                        <div class="mb-2"><strong>Aircon Fare:</strong> ₱${route.aircon_price}</div>
+                        <div class="mb-2"><strong>Start:</strong> ${route.route.start_location || 'N/A'}</div>
+                        <div class="mb-2"><strong>End:</strong> ${route.route.end_location || 'N/A'}</div>
+                        <div class="mb-2"><strong>Distance:</strong> ${route.route.distance_km || 'N/A'} km</div>
+                        <div class="mb-2"><strong>Duration:</strong> ${route.route.estimated_duration || 'N/A'} mins</div>
+                        <div class="mb-2"><strong>Regular Fare:</strong> ₱${parseFloat(route.route.regular_price || 0).toFixed(2)}</div>
+                        <div class="mb-2"><strong>Aircon Fare:</strong> ₱${parseFloat(route.route.aircon_price || 0).toFixed(2)}</div>
                     </div>
                 </div>
                 <div class="row mt-3">
@@ -550,6 +634,10 @@ function viewRoute(id) {
                 </div>
             `;
             document.getElementById('viewRouteModal').style.display = 'block';
+        })
+        .catch(error => {
+            console.error('Error loading route:', error);
+            showToast('Failed to load route details', 'error');
         });
 }
 

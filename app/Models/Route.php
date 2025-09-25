@@ -23,7 +23,6 @@ class Route extends Model
         'aircon_price',
         'status',
         'geometry',
-        'geometry_data',
         'stops_data'
     ];
 
@@ -32,7 +31,7 @@ class Route extends Model
         'aircon_price' => 'decimal:2',
         'distance_km' => 'decimal:2',
         'estimated_duration' => 'integer',
-        'geometry_data' => 'array',
+        // 'geometry' => 'array',
         'stops_data' => 'array'
     ];
 
@@ -46,5 +45,16 @@ class Route extends Model
         return $this->belongsToMany(Stop::class, 'route_stops', 'route_id', 'stop_id')
             ->withPivot('stop_order', 'estimated_minutes')
             ->orderBy('route_stops.stop_order');
+    }
+
+    public function getPathAttribute()
+    {
+        // Mapbox GeoJSON uses [lng, lat], but many maps expect [lat, lng]
+        if (isset($this->geometry['coordinates'])) {
+            return collect($this->geometry['coordinates'])
+                ->map(fn($coord) => [(float)$coord[1], (float)$coord[0]]) // [lat, lng]
+                ->toArray();
+        }
+        return [];
     }
 }

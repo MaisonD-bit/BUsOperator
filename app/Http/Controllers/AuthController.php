@@ -70,6 +70,36 @@ class AuthController extends Controller
         return redirect()->route('operator.panel');
     }
 
+    public function apiLogin(Request $request)
+    {
+
+        if (!$request->wantsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'API endpoint requires JSON requests'
+            ], 400);
+        }
+
+        $credentials = $request->validate([
+            'email' => 'required|email',
+            'password' => 'required'
+        ]);
+
+        if (!Auth::attempt($credentials)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials'
+            ], 401);
+        }
+
+        $user = Auth::user();
+        return response()->json([
+            'success' => true,
+            'user' => $user,
+            'token' => $user->createToken('driver_token')->plainTextToken
+        ]);
+    }
+
     public function logout(Request $request)
     {
         Auth::logout();

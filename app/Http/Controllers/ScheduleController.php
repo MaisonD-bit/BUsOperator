@@ -279,7 +279,7 @@ class ScheduleController extends Controller
             // Get all schedules for this driver (including scheduled, accepted, active, completed)
             $allSchedules = Schedule::with(['route', 'bus'])
                 ->where('driver_id', $driverId)
-                ->orderBy('date', 'asc')
+                ->orderBy('date', 'desc') // Show newest first
                 ->orderBy('start_time', 'asc')
                 ->get();
 
@@ -292,6 +292,10 @@ class ScheduleController extends Controller
                 return $schedule->date > $today;
             })->values();
 
+            $pastSchedules = $allSchedules->filter(function($schedule) use ($today) {
+                return $schedule->date < $today;
+            })->values();
+
             return response()->json([
                 'success' => true,
                 'driver' => [
@@ -300,9 +304,10 @@ class ScheduleController extends Controller
                     'email' => $driver->email
                 ],
                 'schedules' => [
+                    'all' => $allSchedules->values(),
                     'today' => $todaySchedules,
                     'upcoming' => $upcomingSchedules,
-                    'all' => $allSchedules->values()
+                    'past' => $pastSchedules
                 ]
             ]);
         } catch (\Exception $e) {

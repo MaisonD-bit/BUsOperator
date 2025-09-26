@@ -9,7 +9,7 @@ use App\Http\Controllers\RouteController;
 use App\Http\Controllers\BusController;
 
 Route::prefix('v1')->group(function () {
-    
+
     Route::post('/auth/login', [AuthController::class, 'apiLogin']);
 
     Route::post('/drivers/login', [DriverController::class, 'loginFromApp']);

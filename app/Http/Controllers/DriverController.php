@@ -614,13 +614,14 @@ public function profile($id)
         }
 
         $driver = Driver::where('email', $request->email)->first();
-        if (!$driver || !\Illuminate\Support\Facades\Hash::check($request->password, $driver->password)) {
+
+        if (!$driver || !Hash::check($request->password, $driver->password)) { // Make sure Hash::check IS used correctly
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid email or password'
             ], 401);
         }
-
+        
         return response()->json([
             'success' => true,
             'driver' => [

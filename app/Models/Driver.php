@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Support\Facades\Hash;
 
 class Driver extends Authenticatable
 {
@@ -49,5 +50,10 @@ class Driver extends Authenticatable
     public function routes()
     {
         return $this->belongsToMany(Route::class, 'schedules');
+    }
+
+    public function setPasswordAttribute($value)
+    {
+        $this->attributes['password'] = Hash::make($value);
     }
 }

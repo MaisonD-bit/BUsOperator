@@ -6,50 +6,45 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
-    /**
-     * Run the migrations.
-     */
     public function up(): void
     {
         Schema::create('drivers', function (Blueprint $table) {
             $table->id();
-            
-            // Basic driver information
+            $table->foreignId('user_id')->constrained('users')->onDelete('cascade'); // 🔗 Bus operator ID
+
+            // Auth & Profile
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('password');
             $table->string('contact_number');
             $table->text('address');
             $table->date('date_of_birth');
-            $table->string('gender');
-            
-            // License information
+            $table->enum('gender', ['male', 'female', 'other']);
+
+            // License
             $table->string('license_number')->unique();
             $table->date('license_expiry');
-            
-            // Emergency contact
+
+            // Emergency Contact
             $table->string('emergency_name');
             $table->string('emergency_relation');
             $table->string('emergency_contact');
-            
-            // Driver status and assignment
-            $table->enum('status', ['active', 'inactive', 'suspended'])->default('active');
-            $table->string('terminal')->default('North Terminal');
-            
-            // Additional fields
+
+            // Status & Metadata
+            $table->enum('status', ['active', 'inactive', 'pending', 'suspended', 'on_leave'])->default('pending');
             $table->text('notes')->nullable();
             $table->string('photo_url')->nullable();
-            
-            // External reference (from Bus Driver app)
-            $table->string('external_driver_id')->nullable()->unique(); // Reference to driver ID from Bus Driver app
-            
-            // Timestamps
+
+            // App Registration
+            $table->boolean('app_registered')->default(true);
+            $table->string('registration_source')->default('mobile_app');
+            $table->timestamp('last_app_login')->nullable();
+            $table->string('device_token')->nullable();
+
             $table->timestamps();
         });
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('drivers');

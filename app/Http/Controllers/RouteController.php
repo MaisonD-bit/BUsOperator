@@ -12,9 +12,32 @@ class RouteController extends Controller
     /**
      * Display routes panel
      */
-    public function index()
+    public function index(Request $request)
     {
-        $routes = BusRoute::orderBy('created_at', 'desc')->paginate(15);
+        $query = BusRoute::orderBy('created_at', 'desc');
+
+        // Apply search filter (name, code, start, end)
+        if ($request->filled('search')) {
+            $searchTerm = $request->search;
+            $query->where(function ($q) use ($searchTerm) {
+                $q->where('name', 'like', "%{$searchTerm}%")
+                ->orWhere('code', 'like', "%{$searchTerm}%")
+                ->orWhere('start_location', 'like', "%{$searchTerm}%")
+                ->orWhere('end_location', 'like', "%{$searchTerm}%");
+            });
+        }
+
+        // Apply status filter
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
+        // ✅ Apply bus_type filter
+        if ($request->filled('bus_type')) {
+            $query->where('bus_type', $request->bus_type);
+        }
+
+        $routes = $query->paginate(15);
 
         $stats = [
             'total_routes' => BusRoute::count(),
@@ -36,8 +59,8 @@ class RouteController extends Controller
             'start_location' => 'required|string|max:255',
             'end_location' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'regular_price' => 'required|numeric|min:0',
-            'aircon_price' => 'required|numeric|min:0',
+            'route_fare' => 'required|numeric|min:0',
+            'bus_type' => 'required|string|in:regular,aircon', 
             'distance_km' => 'required|numeric|min:0',
             'estimated_duration' => 'required|integer|min:1',
             'status' => 'required|string|in:active,inactive',
@@ -108,8 +131,10 @@ class RouteController extends Controller
                     'aircon_price' => $route->aircon_price,
                     'distance_km' => $route->distance_km,
                     'estimated_duration' => $route->estimated_duration,
+                    'bus_type' => $route->bus_type,
+                    'route_fare' => $route->route_fare,
                     'status' => $route->status,
-                    'geometry' => $geometry,        // ← CHANGED: 'geometry' (raw string)
+                    'geometry' => $geometry,        
                     'stops_data' => $stopsArr
                 ]
             ]);
@@ -140,6 +165,7 @@ class RouteController extends Controller
             'aircon_price' => 'numeric|min:0',
             'distance_km' => 'numeric|min:0',
             'estimated_duration' => 'integer|min:1',
+            'bus_type' => 'required|string|in:regular,aircon',
             'status' => 'string|in:active,inactive',
             'geometry' => 'required|string',
         ]);
@@ -330,5 +356,195 @@ class RouteController extends Controller
             'success' => true,
             'stats' => $stats
         ]);
+    }
+
+    public function getRoutesByStartLocation($start_location)
+    {
+        try {
+            $routes = BusRoute::where('status', 'active')
+                ->where('start_location', $start_location)
+                ->select('id', 'name', 'code', 'start_location', 'end_location', 'regular_price', 'aircon_price', 'distance_km')
+                ->orderBy('end_location')
+                ->get();
+
+            return response()->json([
+                'success' => true,
+                'routes' => $routes
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('Get routes by start location error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load routes'
+            ], 500);
+        }
+    }
+
+    public function getDestinations(Request $request)
+    {
+        $origin = $request->query('origin'); // ✅ This is correct
+
+        if (!$origin) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Origin is required'
+            ], 400);
+        }
+
+        // Use the aliased model if needed
+        $destinations = BusRoute::where('start_location', $origin)
+            ->pluck('end_location')
+            ->unique()
+            ->values();
+
+        if ($destinations->isEmpty()) {
+            return response()->json([
+                'success' => true,
+                'destinations' => []
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'destinations' => $destinations
+        ]);
+    }
+
+    public function getAllDestinations()
+    {
+        try {
+            // Fetch all unique end_location values (no auth needed)
+            $destinations = BusRoute::where('status', 'active')
+                ->pluck('end_location')
+                ->unique()
+                ->values();
+
+            return response()->json([
+                'success' => true,
+                'destinations' => $destinations
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Get all destinations error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load destinations'
+            ], 500);
+        }
+    }
+
+    public function searchRoutes(Request $request)
+    {
+        $origin = $request->input('origin');
+        $destination = $request->input('destination');
+
+        if (!$origin || !$destination) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Origin and destination are required'
+            ], 400);
+        }
+
+        try {
+            // Fetch routes that match the origin and destination
+            $routes = BusRoute::with(['buses']) // Eager load buses to get operator info
+                ->where('start_location', $origin)
+                ->where('end_location', $destination)
+                ->where('status', 'active')
+                ->get();
+
+            // Transform the data to include operator and accommodation info
+            $formattedRoutes = $routes->map(function ($route) {
+                // Assuming each route can have multiple buses (operators)
+                // and each bus has an accommodation type
+                $operators = $route->buses->map(function ($bus) use ($route) {
+                    return [
+                        'id' => $bus->id,
+                        'name' => $bus->bus_company ?? 'Unknown Operator',
+                        'accommodation_type' => $bus->accommodation_type,
+                        'is_aircon' => $bus->accommodation_type === 'air-conditioned',
+                        'fare' => $bus->accommodation_type === 'air-conditioned' ? $route->aircon_price : $route->regular_price,
+                    ];
+                });
+
+                return [
+                    'id' => $route->id,
+                    'name' => $route->name,
+                    'start_location' => $route->start_location,
+                    'end_location' => $route->end_location,
+                    'date' => now()->toDateString(), // Or however you determine the date
+                    'operators' => $operators,
+                    'geometry' => $route->geometry ? json_decode($route->geometry, true) : null,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'routes' => $formattedRoutes
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Search routes error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to search routes'
+            ], 500);
+        }
+    }
+
+    public function getRoutesToDestination(Request $request)
+    {
+        $destination = $request->query('destination');
+
+        if (!$destination) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Destination is required'
+            ], 400);
+        }
+
+        try {
+            $routes = BusRoute::with(['buses']) // Eager load buses for operator info
+                ->where('end_location', $destination)
+                ->where('status', 'active')
+                ->get();
+
+            // Transform the data to include operator and accommodation info
+            $formattedRoutes = $routes->map(function ($route) {
+                // Group buses by operator/company
+                $operators = $route->buses->groupBy('bus_company')->map(function ($busesForCompany) use ($route) {
+                    $sampleBus = $busesForCompany->first();
+                    $isAircon = $sampleBus->accommodation_type === 'air-conditioned';
+                    
+                    return [
+                        'id' => $sampleBus->id,
+                        'name' => $sampleBus->bus_company ?? 'Unknown Operator',
+                        'accommodation_type' => $sampleBus->accommodation_type,
+                        'is_aircon' => $isAircon,
+                        'fare' => $isAircon ? $route->aircon_price : $route->regular_price,
+                    ];
+                })->values();
+
+                return [
+                    'id' => $route->id,
+                    'name' => $route->name,
+                    'start_location' => $route->start_location,
+                    'end_location' => $route->end_location,
+                    'date' => now()->toDateString(), // Or however you determine the date
+                    'operators' => $operators,
+                    'geometry' => $route->geometry ? json_decode($route->geometry, true) : null,
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'routes' => $formattedRoutes
+            ]);
+        } catch (\Exception $e) {
+            \Log::error('Get routes to destination error: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to load routes'
+            ], 500);
+        }
     }
 }

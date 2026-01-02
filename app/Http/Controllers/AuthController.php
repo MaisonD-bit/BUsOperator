@@ -4,100 +4,103 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use App\Models\User;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
+use App\Models\User;
 
 class AuthController extends Controller
 {
     public function showLoginForm()
     {
+        if (Auth::check()) {
+            return redirect()->route('operator.panel');
+        }
         return view('login');
     }
 
     public function showRegisterForm()
     {
+        if (Auth::check()) {
+            return redirect()->route('operator.panel');
+        }
         return view('register');
     }
 
     public function login(Request $request)
     {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required',
+        ]);
+
         $credentials = $request->only('email', 'password');
+        
         if (Auth::attempt($credentials, $request->filled('remember'))) {
             $request->session()->regenerate();
+            
+            $user = Auth::user();
+            if ($user->role !== 'bus_operator') {
+                Auth::logout();
+                return back()->withErrors(['email' => 'Access denied. Bus operators only.'])->withInput();
+            }
+            
             return redirect()->intended(route('operator.panel'));
         }
+
         return back()->withErrors(['email' => 'Invalid credentials'])->withInput();
     }
 
     public function register(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|string|confirmed|min:6',
-            'role' => 'required|in:operator',
-            'contact_number' => 'required|string|max:20',
+            'first_name' => 'required|string|max:255', 
+            'middle_initial' => 'nullable|string|max:1', 
+            'last_name' => 'required|string|max:255', 
+            'email' => 'required|email|unique:users,email',
+            'password' => 'required|string|confirmed|min:8',
+            'terminal' => 'required|in:north,south', 
             'company_name' => 'required|string|max:255',
-            'company_address' => 'required|string|max:255',
+            'company_address' => 'required|string|max:500',
             'company_contact' => 'required|string|max:20',
             'company_email' => 'required|email|max:255',
             'fleet_size' => 'required|integer|min:1',
-            'routes_served' => 'required|string|max:255',
-            'photo' => 'nullable|image|mimes:jpeg,png,jpg|max:2048',
+            'photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
         ]);
 
-        $photoPath = null;
-        if ($request->hasFile('photo')) {
-            $photoPath = $request->file('photo')->store('operators', 'public');
+        try {
+            $photoPath = null;
+            if ($request->hasFile('photo')) {
+                $file = $request->file('photo');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $photoPath = $file->storeAs('operators', $filename, 'public');
+            }
+
+            $middle = $request->middle_initial ? ' ' . $request->middle_initial . '.' : '';
+            $fullName = $request->first_name . $middle . ' ' . $request->last_name;
+
+            $user = User::create([
+                'name' => $fullName,
+                'first_name' => $request->first_name, 
+                'middle_initial' => $request->middle_initial, 
+                'last_name' => $request->last_name, 
+                'email' => $request->email,
+                'password' => Hash::make($request->password),
+                'role' => 'bus_operator', 
+                'terminal' => $request->terminal, 
+                'company_name' => $request->company_name,
+                'company_address' => $request->company_address,
+                'company_contact' => $request->company_contact,
+                'company_email' => $request->company_email,
+                'fleet_size' => $request->fleet_size,
+                'photo_url' => $photoPath,
+                'status' => 'active',
+            ]);
+
+            return redirect()->route('login')->with('success', 'Registration successful! Please login with your credentials.');
+
+        } catch (\Exception $e) {
+            return back()->withErrors(['email' => 'Registration failed. Please try again.'])->withInput();
         }
-
-        $user = User::create([
-            'name' => $request->name,
-            'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role' => $request->role,
-            'contact_number' => $request->contact_number,
-            'company_name' => $request->company_name,
-            'company_address' => $request->company_address,
-            'company_contact' => $request->company_contact,
-            'company_email' => $request->company_email,
-            'fleet_size' => $request->fleet_size,
-            'routes_served' => $request->routes_served,
-            'photo_url' => $photoPath,
-        ]);
-
-        Auth::login($user);
-        return redirect()->route('operator.panel');
-    }
-
-    public function apiLogin(Request $request)
-    {
-
-        if (!$request->wantsJson()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'API endpoint requires JSON requests'
-            ], 400);
-        }
-
-        $credentials = $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
-
-        if (!Auth::attempt($credentials)) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid credentials'
-            ], 401);
-        }
-
-        $user = Auth::user();
-        return response()->json([
-            'success' => true,
-            'user' => $user,
-            'token' => $user->createToken('driver_token')->plainTextToken
-        ]);
     }
 
     public function logout(Request $request)
@@ -105,6 +108,6 @@ class AuthController extends Controller
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
-        return redirect()->route('login');
+        return redirect()->route('login')->with('success', 'Logged out successfully');
     }
 }

@@ -36,178 +36,132 @@
     <!-- Route Assignment Section - Initially Hidden -->
     <div class="card border-0 mb-4 shadow-sm" id="scheduleFormCard" style="display: none;">
         <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
-            <h5 class="mb-0"><i class="fas fa-route me-2"></i>Assign Route to Driver</h5>
+            <h5 class="mb-0"><i class="fas fa-route me-2"></i>Assign Routes to Driver</h5>
             <button type="button" class="btn btn-sm btn-outline-light" id="hideScheduleFormBtn">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         <div class="card-body">
-            <form id="scheduleForm" method="POST" action="{{ route('schedule.store') }}">
+            <!-- Step 1: Select Driver -->
+            <form id="driverSelectionForm" method="POST">
                 @csrf
                 <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <label for="route" class="form-label fw-bold">Select Route <span class="text-danger">*</span></label>
-                        <select id="route" name="route_id" class="form-select" required>
+                    <div class="col-md-6 mb-3">
+                        <label for="driver_select" class="form-label fw-bold">Select Driver <span class="text-danger">*</span></label>
+                        <select id="driver_select" name="driver_id" class="form-select" required>
+                            <option value="">-- Choose Driver --</option>
+                            @foreach($drivers as $driver)
+                                <option value="{{ $driver->id }}">{{ $driver->name }} ({{ $driver->status }})</option>
+                            @endforeach
+                        </select>
+                        <div class="invalid-feedback" id="driver_select_error"></div>
+                    </div>
+                    <div class="col-md-6 mb-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary" id="selectDriverBtn">
+                            <i class="fas fa-arrow-right me-2"></i>Select Driver
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Step 2: Create Schedules for Selected Driver -->
+            <div id="scheduleCreationSection" style="display: none;">
+                <div class="alert alert-info mb-4">
+                    <i class="fas fa-user me-2"></i>
+                    <strong id="selectedDriverName">Driver Name</strong> selected.
+                    <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="changeDriverBtn">
+                        <i class="fas fa-edit me-1"></i>Change Driver
+                    </button>
+                </div>
+
+                <div id="schedulesContainer">
+                    <!-- Dynamic schedule rows will be added here -->
+                </div>
+
+                <button type="button" class="btn btn-outline-success mb-3" id="addScheduleRowBtn">
+                    <i class="fas fa-plus me-2"></i>Add Another Schedule
+                </button>
+
+                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
+                    <button type="button" class="btn btn-outline-secondary me-md-2" id="resetSchedulesFormBtn">
+                        <i class="fas fa-undo me-2"></i>Reset Form
+                    </button>
+                    <button type="button" class="btn btn-primary" id="saveAllSchedulesBtn">
+                        <i class="fas fa-check me-2"></i>Save All Schedules
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden template for a single schedule row -->
+    <div id="scheduleRowTemplate" style="display: none;">
+        <div class="schedule-row card mb-3">
+            <div class="card-body">
+                <input type="hidden" name="schedules[][driver_id]" class="driver_id_input">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Route <span class="text-danger">*</span></label>
+                        <select name="schedules[][route_id]" class="form-select route-select" required>
                             <option value="">-- Choose Route --</option>
-                            @foreach($routes ?? [] as $route)
-                                <option value="{{ $route->id }}" 
-                                        data-start="{{ $route->start_location }}"
-                                        data-end="{{ $route->end_location }}"
-                                        data-regular="{{ $route->regular_price }}"
-                                        data-aircon="{{ $route->aircon_price }}"
-                                        data-duration="{{ $route->estimated_duration }}">
-                                    {{ $route->name }}
+                            @foreach($routes as $route)
+                                <option value="{{ $route->id }}"
+                                        data-duration="{{ $route->estimated_duration }}"
+                                        data-regular-fare="{{ $route->regular_price ?? $route->route_fare ?? 0 }}"
+                                        data-aircon-fare="{{ $route->aircon_price ?? $route->route_fare ?? 0 }}"
+                                        data-route-fare="{{ $route->route_fare ?? $route->regular_price ?? 0 }}"
+                                        data-bus-type="{{ $route->bus_type }}">
+                                    {{ $route->name }} ({{ $route->end_location }}) - ₱{{ number_format($route->route_fare ?? $route->regular_price ?? 0, 2) }}
                                 </option>
                             @endforeach
                         </select>
-                        <div class="invalid-feedback" id="route_id_error"></div>
+                        <div class="invalid-feedback route-error"></div>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="driver" class="form-label fw-bold">Select Driver <span class="text-danger">*</span></label>
-                        <select id="driver" name="driver_id" class="form-select" required>
-                            <option value="">-- Choose Driver --</option>
-                            @if(isset($drivers) && $drivers->count() > 0)
-                                @foreach($drivers as $driver)
-                                    <option value="{{ $driver->id }}">{{ $driver->name }} ({{ $driver->status }})</option>
-                                @endforeach
-                            @else
-                                <option disabled>No active drivers available</option>
-                            @endif
-                        </select>
-                        <div class="invalid-feedback" id="driver_id_error"></div>
-                        <!-- DEBUG INFO -->
-                        @if(config('app.debug'))
-                            <small class="text-muted">
-                                Debug: {{ isset($drivers) ? $drivers->count() : 'No drivers variable' }} drivers found
-                            </small>
-                        @endif
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="bus" class="form-label fw-bold">Select Bus <span class="text-danger">*</span></label>
-                        <select id="bus" name="bus_id" class="form-select" required>
+                    <div class="col-md-3">
+                        <label class="form-label fw-bold">Bus <span class="text-danger">*</span></label>
+                        <select name="schedules[][bus_id]" class="form-select bus-select" required>
                             <option value="">-- Choose Bus --</option>
-                            @if(isset($buses) && $buses->count() > 0)
-                                @foreach($buses as $bus)
-                                    <option value="{{ $bus->id }}" 
-                                            data-type="{{ $bus->accommodation_type }}"
-                                            data-model="{{ $bus->model }}">
-                                        {{ $bus->bus_number }} - {{ $bus->model }} 
-                                        @if($bus->accommodation_type === 'air-conditioned')
-                                            (A/C)
-                                        @endif
-                                    </option>
-                                @endforeach
-                            @else
-                                <option disabled>No active buses available</option>
-                            @endif
+                            @foreach($buses as $bus)
+                                <option value="{{ $bus->id }}" data-type="{{ $bus->accommodation_type }}">
+                                    {{ $bus->bus_number }} - {{ $bus->model }}
+                                    @if($bus->accommodation_type === 'air-conditioned')
+                                        <span class="badge bg-info ms-1">A/C</span>
+                                    @endif
+                                </option>
+                            @endforeach
                         </select>
-                        <div class="invalid-feedback" id="bus_id_error"></div>
-                        <!-- DEBUG INFO -->
-                        @if(config('app.debug'))
-                            <small class="text-muted">
-                                Debug: {{ isset($buses) ? $buses->count() : 'No buses variable' }} buses found
-                            </small>
-                        @endif
+                        <div class="invalid-feedback bus-error"></div>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="date" class="form-label fw-bold">Date <span class="text-danger">*</span></label>
-                        <input type="date" id="date" name="date" class="form-control" required value="{{ date('Y-m-d') }}">
-                        <div class="invalid-feedback" id="date_error"></div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Date <span class="text-danger">*</span></label>
+                        <input type="date" name="schedules[][date]" class="form-control date-input" required value="{{ date('Y-m-d') }}">
+                        <div class="invalid-feedback date-error"></div>
                     </div>
-                </div>
-                
-                <!-- Route Details Display -->
-                <div id="route-details" class="mb-4" style="display: none;">
-                    <div class="card border-primary">
-                        <div class="card-header bg-primary text-white">
-                            <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Route Information</h6>
-                        </div>
-                        <div class="card-body">
-                            <div class="row g-3">
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-light rounded">
-                                        <i class="fas fa-route text-primary mb-2"></i>
-                                        <div class="small text-muted">Route Path</div>
-                                        <div class="fw-bold" id="route-path">-</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-light rounded">
-                                        <i class="fas fa-peso-sign text-success mb-2"></i>
-                                        <div class="small text-muted">Regular Price</div>
-                                        <div class="fw-bold">₱<span id="regular-price">0.00</span></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-light rounded">
-                                        <i class="fas fa-snowflake text-info mb-2"></i>
-                                        <div class="small text-muted">Aircon Price</div>
-                                        <div class="fw-bold">₱<span id="aircon-price">0.00</span></div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-light rounded">
-                                        <i class="fas fa-clock text-warning mb-2"></i>
-                                        <div class="small text-muted">Duration</div>
-                                        <div class="fw-bold"><span id="duration">-</span> mins</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-light rounded">
-                                        <i class="fas fa-bus text-secondary mb-2"></i>
-                                        <div class="small text-muted">Bus Type</div>
-                                        <div class="fw-bold" id="bus-type">-</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-2">
-                                    <div class="text-center p-3 bg-success text-white rounded">
-                                        <i class="fas fa-ticket-alt mb-2"></i>
-                                        <div class="small">Final Fare</div>
-                                        <div class="h5 mb-0">₱<span id="final-fare">0.00</span></div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
+                        <input type="time" name="schedules[][start_time]" class="form-control start-time-input" required>
+                        <div class="invalid-feedback start-time-error"></div>
                     </div>
-                </div>
-
-                <div class="row">
-                    <div class="col-md-4 mb-3">
-                        <label for="start_time" class="form-label fw-bold">Start Time <span class="text-danger">*</span></label>
-                        <input type="time" id="start_time" name="start_time" class="form-control" required>
-                        <div class="invalid-feedback" id="start_time_error"></div>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="end_time" class="form-label fw-bold">End Time <span class="text-danger">*</span></label>
-                        <input type="time" id="end_time" name="end_time" class="form-control" required>
-                        <div class="invalid-feedback" id="end_time_error"></div>
-                    </div>
-                    <div class="col-md-4 mb-3">
-                        <label for="status" class="form-label fw-bold">Status</label>
-                        <select id="status" name="status" class="form-select">
-                            <option value="scheduled">Scheduled</option>
-                            <option value="active">Active</option>
-                            <option value="completed">Completed</option>
-                            <option value="cancelled">Cancelled</option>
-                        </select>
-                        <div class="invalid-feedback" id="status_error"></div>
+                    <div class="col-md-2">
+                        <label class="form-label fw-bold">End Time</label>
+                        <input type="time" name="schedules[][end_time]" class="form-control end-time-input" readonly>
+                        <div class="invalid-feedback end-time-error"></div>
                     </div>
                 </div>
                 
-                <div class="mb-3">
-                    <label for="notes" class="form-label">Notes (Optional)</label>
-                    <textarea id="notes" name="notes" class="form-control" rows="2" placeholder="Additional notes for this schedule..."></textarea>
+                <!-- ✅ Display calculated fare -->
+                <div class="mt-2">
+                    <small class="text-muted">Calculated Fare: <strong class="fare-display text-success">₱0.00</strong></small>
                 </div>
                 
-                <div class="d-grid gap-2 d-md-flex justify-content-md-end">
-                    <button type="button" class="btn btn-outline-secondary me-md-2" id="resetFormBtn">
-                        <i class="fas fa-undo me-2"></i>Reset Form
-                    </button>
-                    <button type="submit" class="btn btn-primary" id="submitBtn">
-                        <i class="fas fa-check me-2"></i><span id="submitText">Create Schedule</span>
-                    </button>
-                </div>
-            </form>
+                <!-- Hidden fare inputs -->
+                <input type="hidden" name="schedules[][fare_regular]" class="fare-regular-input">
+                <input type="hidden" name="schedules[][fare_aircon]" class="fare-aircon-input">
+                
+                <button type="button" class="btn btn-sm btn-outline-danger mt-3 remove-schedule-row">
+                    <i class="fas fa-trash me-1"></i>Remove
+                </button>
+            </div>
         </div>
     </div>
 

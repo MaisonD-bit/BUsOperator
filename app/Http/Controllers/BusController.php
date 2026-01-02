@@ -6,27 +6,56 @@ use App\Models\Bus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth; 
 
 class BusController extends Controller
 {
     /**
-     * Display buses panel
+     * Display buses panel with terminal filtering
      */
-    public function index()
+    public function index(Request $request)
     {
-        $buses = Bus::with(['schedules' => function($query) {
-            $query->where('date', '>=', now()->toDateString())
-                  ->orderBy('date')
-                  ->orderBy('start_time');
-        }])
-        ->orderBy('created_at', 'desc')
-        ->paginate(15);
+        $user = Auth::user();
+        if (!$user || $user->terminal === null) {
+            abort(403, 'Access denied. Terminal not assigned.');
+        }
 
+        $operatorTerminal = $user->terminal;
+
+        // Build query with terminal filtering
+        $query = Bus::with(['schedules' => function($query) {
+             $query->where('date', '>=', now()->toDateString())
+                   ->orderBy('date')
+                   ->orderBy('start_time');
+         }])->where('terminal', $operatorTerminal);
+
+        // Apply search filters
+        if ($request->filled('search')) {
+            $search = $request->get('search');
+            $query->where(function($q) use ($search) {
+                $q->where('bus_number', 'like', "%{$search}%")
+                  ->orWhere('plate_number', 'like', "%{$search}%")
+                  ->orWhere('model', 'like', "%{$search}%")
+                  ->orWhere('bus_company', 'like', "%{$search}%");
+            });
+        }
+
+        if ($request->filled('status')) {
+            $query->where('status', $request->get('status'));
+        }
+
+        if ($request->filled('accommodation_type')) {
+            $query->where('accommodation_type', $request->get('accommodation_type'));
+        }
+
+        $buses = $query->orderBy('created_at', 'desc')->paginate(15);
+
+        // Terminal-specific statistics
         $stats = [
-            'total_buses' => Bus::count(),
-            'available_buses' => Bus::where('status', 'available')->count(),
-            'in_service_buses' => Bus::where('status', 'in_service')->count(),
-            'maintenance_buses' => Bus::where('status', 'maintenance')->count(),
+            'total_buses' => Bus::where('terminal', $operatorTerminal)->count(),
+            'available_buses' => Bus::where('status', 'available')->where('terminal', $operatorTerminal)->count(),
+            'in_service_buses' => Bus::where('status', 'in_service')->where('terminal', $operatorTerminal)->count(),
+            'maintenance_buses' => Bus::where('status', 'maintenance')->where('terminal', $operatorTerminal)->count(),
         ];
 
         return view('panels.buses', compact('buses', 'stats'));
@@ -37,15 +66,20 @@ class BusController extends Controller
      */
     public function store(Request $request)
     {
+        $user = Auth::user();
+        if (!$user || $user->terminal === null) {
+            return response()->json(['success' => false, 'message' => 'Access denied. Terminal not assigned.'], 403);
+        }
+
         $validator = Validator::make($request->all(), [
-            'bus_number' => 'required|string|max:20|unique:buses',
             'plate_number' => 'required|string|max:20|unique:buses',
+            'bus_number' => 'required|string|max:20|unique:buses',
+            'model' => 'required|string|max:100',
             'capacity' => 'required|integer|min:1',
-            'bus_type' => 'required|string|in:regular,aircon',
-            'manufacturer' => 'nullable|string|max:100',
-            'model' => 'nullable|string|max:100',
-            'year' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
-            'status' => 'required|string|in:available,in_service,maintenance,out_of_service',
+            'bus_company' => 'nullable|string|max:100',
+            'accommodation_type' => 'required|in:regular,air-conditioned',
+            'status' => 'required|in:available,in_service,maintenance,out_of_service',
+            'description' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -56,45 +90,46 @@ class BusController extends Controller
         }
 
         try {
-            $bus = Bus::create($request->all());
+            // Automatically assign the operator's terminal to the bus
+            $busData = $request->all();
+            $busData['terminal'] = $user->terminal;
+
+            $bus = Bus::create($busData);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Bus created successfully',
+                'message' => 'Bus added successfully to ' . ucfirst($user->terminal) . ' Terminal',
                 'bus' => $bus
-            ], 201);
-
+            ]);
         } catch (\Exception $e) {
             Log::error('Bus creation error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to create bus'
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Failed to add bus'], 500);
         }
     }
 
     /**
-     * Show bus details
+     * Show bus details (with terminal check)
      */
     public function show($id)
     {
         try {
-            $bus = Bus::with(['schedules.driver', 'schedules.route'])->findOrFail($id);
+            $user = Auth::user();
+            $bus = Bus::with(['schedules.driver', 'schedules.route'])
+                     ->where('terminal', $user->terminal)
+                     ->findOrFail($id);
 
             return response()->json([
                 'success' => true,
-                'bus' => [
-                    'id' => $bus->id,
-                    'bus_number' => $bus->bus_number,
-                    'plate_number' => $bus->plate_number,
-                    'capacity' => $bus->capacity,
-                    'bus_type' => $bus->bus_type,
-                    'manufacturer' => $bus->manufacturer,
-                    'model' => $bus->model,
-                    'year' => $bus->year,
-                    'status' => $bus->status,
-                    'schedules' => $bus->schedules
-                ]
+                'id' => $bus->id,
+                'bus_number' => $bus->bus_number,
+                'plate_number' => $bus->plate_number,
+                'model' => $bus->model,
+                'capacity' => $bus->capacity,
+                'bus_company' => $bus->bus_company,
+                'accommodation_type' => $bus->accommodation_type,
+                'status' => $bus->status,
+                'terminal' => $bus->terminal,
+                'description' => $bus->description,
             ]);
 
         } catch (\Exception $e) {
@@ -106,21 +141,26 @@ class BusController extends Controller
     }
 
     /**
-     * Update bus
+     * Update bus (with terminal check)
      */
     public function update(Request $request, $id)
     {
-        $bus = Bus::findOrFail($id);
+        $user = Auth::user();
+        if (!$user || $user->terminal === null) {
+            return response()->json(['success' => false, 'message' => 'Access denied. Terminal not assigned.'], 403);
+        }
+
+        $bus = Bus::where('terminal', $user->terminal)->findOrFail($id);
 
         $validator = Validator::make($request->all(), [
-            'bus_number' => 'string|max:20|unique:buses,bus_number,' . $id,
-            'plate_number' => 'string|max:20|unique:buses,plate_number,' . $id,
-            'capacity' => 'integer|min:1',
-            'bus_type' => 'string|in:regular,aircon',
-            'manufacturer' => 'nullable|string|max:100',
-            'model' => 'nullable|string|max:100',
-            'year' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
-            'status' => 'string|in:available,in_service,maintenance,out_of_service',
+            'bus_number' => 'required|string|max:20|unique:buses,bus_number,' . $id,
+            'plate_number' => 'required|string|max:20|unique:buses,plate_number,' . $id,
+            'model' => 'required|string|max:100',
+            'capacity' => 'required|integer|min:1',
+            'bus_company' => 'nullable|string|max:100',
+            'accommodation_type' => 'required|in:regular,air-conditioned',
+            'status' => 'required|in:available,in_service,maintenance,out_of_service',
+            'description' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
@@ -131,56 +171,51 @@ class BusController extends Controller
         }
 
         try {
-            $bus->update($request->all());
+            // Keep the existing terminal, don't allow changing it
+            $busData = $request->all();
+            unset($busData['terminal']); // Remove terminal from update data
+            
+            $bus->update($busData);
 
             return response()->json([
                 'success' => true,
                 'message' => 'Bus updated successfully',
                 'bus' => $bus
             ]);
-
         } catch (\Exception $e) {
             Log::error('Bus update error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to update bus'
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Failed to update bus'], 500);
         }
     }
 
     /**
-     * Delete bus
+     * Delete bus (with terminal check)
      */
     public function destroy($id)
     {
+        $user = Auth::user();
+        if (!$user || $user->terminal === null) {
+            return response()->json(['success' => false, 'message' => 'Access denied. Terminal not assigned.'], 403);
+        }
+
+        $bus = Bus::where('terminal', $user->terminal)->findOrFail($id);
+
         try {
-            $bus = Bus::findOrFail($id);
-            
             $activeSchedules = $bus->schedules()
-                ->whereIn('status', ['scheduled', 'active'])
-                ->where('date', '>=', now()->toDateString())
-                ->count();
+                                  ->whereIn('status', ['scheduled', 'active'])
+                                  ->where('date', '>=', now()->toDateString())
+                                  ->count();
 
             if ($activeSchedules > 0) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Cannot delete bus with active schedules'
-                ], 400);
+                return response()->json(['success' => false, 'message' => 'Cannot delete bus with active schedules'], 400);
             }
 
             $bus->delete();
 
-            return response()->json([
-                'success' => true,
-                'message' => 'Bus deleted successfully'
-            ]);
-
+            return response()->json(['success' => true, 'message' => 'Bus deleted successfully']);
         } catch (\Exception $e) {
             Log::error('Bus deletion error: ' . $e->getMessage());
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to delete bus'
-            ], 500);
+            return response()->json(['success' => false, 'message' => 'Failed to delete bus'], 500);
         }
     }
 
@@ -239,12 +274,14 @@ class BusController extends Controller
      */
     public function getAvailableBuses(Request $request)
     {
+        $user = Auth::user();
         $date = $request->get('date', now()->toDateString());
         $startTime = $request->get('start_time');
         $endTime = $request->get('end_time');
         $excludeScheduleId = $request->get('exclude_schedule_id');
 
         $query = Bus::where('status', 'available')
+            ->where('terminal', $user->terminal)
             ->whereDoesntHave('schedules', function ($scheduleQuery) use ($date, $startTime, $endTime, $excludeScheduleId) {
                 $scheduleQuery->where('date', $date)
                       ->where(function ($timeQuery) use ($startTime, $endTime) {
@@ -261,7 +298,7 @@ class BusController extends Controller
                 }
             });
 
-        $availableBuses = $query->select('id', 'bus_number', 'plate_number', 'capacity', 'bus_type')->get();
+        $availableBuses = $query->select('id', 'bus_number', 'plate_number', 'capacity', 'accommodation_type')->get();
 
         return response()->json([
             'success' => true,
@@ -304,21 +341,25 @@ class BusController extends Controller
      */
     public function getBusStats()
     {
+        $user = Auth::user();
+        $terminal = $user->terminal;
+
         $stats = [
-            'total_buses' => Bus::count(),
-            'available_buses' => Bus::where('status', 'available')->count(),
-            'in_service_buses' => Bus::where('status', 'in_service')->count(),
-            'maintenance_buses' => Bus::where('status', 'maintenance')->count(),
-            'out_of_service_buses' => Bus::where('status', 'out_of_service')->count(),
-            'regular_buses' => Bus::where('bus_type', 'regular')->count(),
-            'aircon_buses' => Bus::where('bus_type', 'aircon')->count(),
-            'total_capacity' => Bus::sum('capacity'),
-            'average_capacity' => Bus::avg('capacity'),
+            'total_buses' => Bus::where('terminal', $terminal)->count(),
+            'available_buses' => Bus::where('status', 'available')->where('terminal', $terminal)->count(),
+            'in_service_buses' => Bus::where('status', 'in_service')->where('terminal', $terminal)->count(),
+            'maintenance_buses' => Bus::where('status', 'maintenance')->where('terminal', $terminal)->count(),
+            'out_of_service_buses' => Bus::where('status', 'out_of_service')->where('terminal', $terminal)->count(),
+            'regular_buses' => Bus::where('accommodation_type', 'regular')->where('terminal', $terminal)->count(),
+            'aircon_buses' => Bus::where('accommodation_type', 'air-conditioned')->where('terminal', $terminal)->count(),
+            'total_capacity' => Bus::where('terminal', $terminal)->sum('capacity'),
+            'average_capacity' => Bus::where('terminal', $terminal)->avg('capacity'),
         ];
 
         return response()->json([
             'success' => true,
-            'stats' => $stats
+            'stats' => $stats,
+            'terminal' => ucfirst($terminal) . ' Terminal'
         ]);
     }
 }

@@ -1,6 +1,6 @@
 <div class="sidebar">
     <div class="logo">
-        <i class="fas fa-bus"></i>
+        <img src="{{ asset('images/transitrack_logo.png') }}" alt="TransiTrack Logo" class="logo-img" style="width: 40px; height: 40px; margin-right: 10px; object-fit: contain;">
         <h1>TransiTrack</h1>
     </div>
     <div class="nav-links">

@@ -6,6 +6,7 @@ use App\Models\Bus;
 use App\Models\Route;
 use App\Models\Schedule;
 use App\Models\User;
+use App\Models\Terminal;
 use App\Models\Driver;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -20,19 +21,27 @@ class TerminalController extends Controller
     public function index()
     {
         try {
-            $this->ensureTestData();
-
-            $routes = Route::where('status', 'active')->get();
+            // Get active routes
+            $routes = Route::where('status', 'active')
+                ->orWhere('status', null)
+                ->get();
+            
+            // Get active drivers with license number
             $drivers = Driver::where('status', 'active')
-                ->select('id', 'name', 'email')
+                ->orWhere('status', null)
+                ->select('id', 'name', 'email', 'license_number')
                 ->orderBy('name')
                 ->get();
-            $buses = Bus::where('status', 'active')->get();
+            
+            // Get active buses
+            $buses = Bus::where('status', 'active')
+                ->orWhere('status', null)
+                ->get();
 
             return view('panels.terminal', compact('routes', 'drivers', 'buses'));
         } catch (\Exception $e) {
             Log::error('Terminal index error: ' . $e->getMessage());
-            return back()->with('error', 'Error loading terminal page: ' . $e->getMessage());
+            return redirect()->back()->with('error', 'Error loading terminal: ' . $e->getMessage());
         }
     }
 
@@ -361,5 +370,55 @@ class TerminalController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function assignSpace(Request $request)
+    {
+        $validated = $request->validate([
+            'space_id' => 'required|string',
+            'route_id' => 'required|exists:routes,id',
+            'driver_id' => 'required|exists:drivers,id',
+            'bus_id' => 'required|exists:buses,id'
+        ]);
+
+        try {
+            // Store assignment (you may need to create a TerminalAssignment model)
+            $assignment = Terminal::create([
+                'space_id' => $validated['space_id'],
+                'route_id' => $validated['route_id'],
+                'driver_id' => $validated['driver_id'],
+                'bus_id' => $validated['bus_id'],
+                'assigned_date' => now()->format('Y-m-d'),
+                'status' => 'active'
+            ]);
+
+            return response()->json(['success' => true, 'message' => 'Space assigned successfully']);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+        }
+    }
+
+    public function getAssignments(Request $request)
+    {
+        $date = $request->query('date', now()->format('Y-m-d'));
+        
+        $assignments = Terminal::with(['route', 'driver', 'bus'])
+            ->whereDate('assigned_date', $date)
+            ->where('status', 'active')
+            ->get();
+
+        return response()->json(['assignments' => $assignments]);
+    }
+
+    public function removeAssignment(Request $request)
+    {
+        $assignment = Terminal::find($request->assignment_id);
+        
+        if ($assignment) {
+            $assignment->update(['status' => 'inactive']);
+            return response()->json(['success' => true]);
+        }
+
+        return response()->json(['success' => false], 404);
     }
 }

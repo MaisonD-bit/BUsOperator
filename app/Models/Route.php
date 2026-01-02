@@ -21,6 +21,8 @@ class Route extends Model
         'description',
         'regular_price',
         'aircon_price',
+        'route_fare',        
+        'bus_type',  
         'status',
         'geometry',
         'stops_data'
@@ -32,7 +34,9 @@ class Route extends Model
         'distance_km' => 'decimal:2',
         'estimated_duration' => 'integer',
         // 'geometry' => 'array',
-        'stops_data' => 'array'
+        'stops_data' => 'array',
+        'route_fare' => 'decimal:2',
+        'bus_type' => 'string',
     ];
 
     public function schedules()

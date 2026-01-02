@@ -657,3 +657,321 @@ document.addEventListener('DOMContentLoaded', function() {
     checkBootstrap();
     setTimeout(checkBootstrap, 100);
 });
+
+// =============
+// BULK SCHEDULE ASSIGNMENT LOGIC
+// =============
+
+let currentDriverId = null;
+let currentDriverName = '';
+
+// Handle driver selection
+document.getElementById('driverSelectionForm')?.addEventListener('submit', function(e) {
+    e.preventDefault();
+    const driverSelect = document.getElementById('driver_select');
+    const driverId = driverSelect.value;
+    const driverName = driverSelect.options[driverSelect.selectedIndex].text;
+
+    if (!driverId) {
+        showToast('Please select a driver.', 'error');
+        return;
+    }
+
+    currentDriverId = driverId;
+    currentDriverName = driverName.split(' (')[0];
+
+    document.getElementById('selectedDriverName').textContent = currentDriverName;
+    const scheduleSection = document.getElementById('scheduleCreationSection');
+    scheduleSection.style.display = 'block';
+    
+    this.style.display = 'none';
+
+    // Clear any existing rows first
+    document.getElementById('schedulesContainer').innerHTML = '';
+    
+    // Add the first empty schedule row
+    addScheduleRow();
+    
+    scheduleSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+// Change driver button
+document.getElementById('changeDriverBtn')?.addEventListener('click', function() {
+    document.getElementById('scheduleCreationSection').style.display = 'none';
+    
+    const driverForm = document.getElementById('driverSelectionForm');
+    driverForm.style.display = 'block';
+    
+    document.getElementById('schedulesContainer').innerHTML = '';
+    
+    document.getElementById('driver_select').value = '';
+    currentDriverId = null;
+    currentDriverName = '';
+});
+
+// ✅ Add Schedule Row button listener
+document.getElementById('addScheduleRowBtn')?.addEventListener('click', function() {
+    addScheduleRow();
+});
+
+// ✅ Reset schedules form button listener
+document.getElementById('resetSchedulesFormBtn')?.addEventListener('click', function() {
+    document.getElementById('schedulesContainer').innerHTML = '';
+    addScheduleRow();
+    showToast('Form reset. Add new schedules.', 'info');
+});
+
+// ✅ Save all schedules button listener
+document.getElementById('saveAllSchedulesBtn')?.addEventListener('click', function() {
+    saveAllSchedules();
+});
+
+function addScheduleRow() {
+    const container = document.getElementById('schedulesContainer');
+    const template = document.getElementById('scheduleRowTemplate');
+    
+    if (!template) {
+        console.error('Schedule row template not found');
+        showToast('Error: Template not found', 'error');
+        return;
+    }
+    
+    // Clone the template content
+    const templateContent = template.querySelector('.schedule-row');
+    if (!templateContent) {
+        console.error('Schedule row element not found in template');
+        return;
+    }
+    
+    const newRow = templateContent.cloneNode(true);
+    
+    // Set the driver_id for this row
+    const driverInput = newRow.querySelector('.driver_id_input');
+    if (driverInput) {
+        driverInput.value = currentDriverId;
+    }
+
+    // Add the row to container
+    container.appendChild(newRow);
+
+    // Get elements from the newly added row
+    const routeSelect = newRow.querySelector('.route-select');
+    const startTimeInput = newRow.querySelector('.start-time-input');
+    const endTimeInput = newRow.querySelector('.end-time-input');
+    const busSelect = newRow.querySelector('.bus-select');
+    const removeBtn = newRow.querySelector('.remove-schedule-row');
+
+    // ✅ Auto-calculate end time when start time or route changes
+    if (routeSelect && startTimeInput && endTimeInput) {
+        routeSelect.addEventListener('change', () => {
+            calculateEndTime(routeSelect, startTimeInput, endTimeInput);
+            updateFareInputs(newRow, routeSelect, busSelect);
+        });
+        
+        startTimeInput.addEventListener('change', () => {
+            calculateEndTime(routeSelect, startTimeInput, endTimeInput);
+        });
+    }
+
+    // ✅ Update fare when bus type changes
+    if (busSelect && routeSelect) {
+        busSelect.addEventListener('change', () => {
+            updateFareInputs(newRow, routeSelect, busSelect);
+        });
+    }
+
+    // ✅ Add remove button functionality
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            const rows = container.querySelectorAll('.schedule-row');
+            if (rows.length > 1) {
+                newRow.remove();
+                showToast('Schedule row removed', 'info');
+            } else {
+                showToast('At least one schedule row is required', 'warning');
+            }
+        });
+    }
+}
+
+// ✅ Function to update hidden fare inputs
+function updateFareInputs(row, routeSelect, busSelect) {
+    if (!routeSelect.value) {
+        // Clear fare display if no route selected
+        const fareDisplay = row.querySelector('.fare-display');
+        if (fareDisplay) fareDisplay.textContent = '₱0.00';
+        return;
+    }
+    
+    const selectedRoute = routeSelect.options[routeSelect.selectedIndex];
+    const selectedBus = busSelect && busSelect.value ? busSelect.options[busSelect.selectedIndex] : null;
+    
+    // ✅ Get fare from route (use route_fare as primary, fallback to regular_price)
+    const routeFare = parseFloat(selectedRoute.dataset.routeFare) || 0;
+    const regularFare = parseFloat(selectedRoute.dataset.regularFare) || routeFare;
+    const airconFare = parseFloat(selectedRoute.dataset.airconFare) || routeFare;
+    
+    console.log('Route fare data:', {
+        routeFare,
+        regularFare,
+        airconFare,
+        dataset: selectedRoute.dataset
+    });
+    
+    // ✅ Determine which fare to use based on bus type
+    let finalFare = routeFare; // Default to route fare
+    
+    if (selectedBus) {
+        const busType = selectedBus.dataset.type;
+        const isAircon = busType && busType.toLowerCase().includes('air');
+        finalFare = isAircon ? airconFare : regularFare;
+    }
+    
+    // ✅ Update hidden inputs
+    const fareRegularInput = row.querySelector('.fare-regular-input');
+    const fareAirconInput = row.querySelector('.fare-aircon-input');
+    
+    if (fareRegularInput) fareRegularInput.value = regularFare.toFixed(2);
+    if (fareAirconInput) fareAirconInput.value = airconFare.toFixed(2);
+    
+    // ✅ Update visible fare display
+    const fareDisplay = row.querySelector('.fare-display');
+    if (fareDisplay) {
+        fareDisplay.textContent = `₱${finalFare.toFixed(2)}`;
+    }
+    
+    console.log('Updated fares:', {
+        regularFare,
+        airconFare,
+        finalFare
+    });
+}
+
+// Function to calculate end time
+function calculateEndTime(routeSelect, startTimeInput, endTimeInput) {
+    const routeId = routeSelect.value;
+    const startTime = startTimeInput.value;
+
+    if (!routeId || !startTime) {
+        endTimeInput.value = '';
+        return;
+    }
+
+    const duration = parseInt(routeSelect.options[routeSelect.selectedIndex].dataset.duration) || 0;
+    if (duration <= 0) {
+        endTimeInput.value = '';
+        return;
+    }
+
+    const [startHours, startMinutes] = startTime.split(':').map(Number);
+    let totalMinutes = startHours * 60 + startMinutes + duration;
+
+    const isNextDay = totalMinutes >= 24 * 60;
+    if (isNextDay) {
+        totalMinutes = totalMinutes % (24 * 60);
+    }
+
+    const endHours = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
+    const endMinutes = String(totalMinutes % 60).padStart(2, '0');
+    endTimeInput.value = `${endHours}:${endMinutes}`;
+}
+
+// Function to save all schedules
+async function saveAllSchedules() {
+    const container = document.getElementById('schedulesContainer');
+    const rows = container.querySelectorAll('.schedule-row');
+    
+    if (rows.length === 0) {
+        showToast('Please add at least one schedule.', 'error');
+        return;
+    }
+
+    // ✅ Validate all rows first
+    let isValid = true;
+    const schedules = [];
+    
+    rows.forEach(row => {
+        const scheduleData = {};
+        const inputs = row.querySelectorAll('input[name], select[name]');
+        
+        inputs.forEach(input => {
+            const match = input.name.match(/schedules\[\]\[(\w+)\]/);
+            if (match) {
+                scheduleData[match[1]] = input.value;
+                
+                // ✅ Basic validation
+                if (input.hasAttribute('required') && !input.value) {
+                    isValid = false;
+                    input.classList.add('is-invalid');
+                } else {
+                    input.classList.remove('is-invalid');
+                }
+            }
+        });
+        
+        schedules.push(scheduleData);
+    });
+
+    if (!isValid) {
+        showToast('Please fill in all required fields.', 'error');
+        return;
+    }
+
+    // Show loading state
+    const saveBtn = document.getElementById('saveAllSchedulesBtn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+
+    try {
+        const response = await fetch('/schedules/bulk', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            },
+            body: JSON.stringify({ schedules })
+        });
+
+        // ✅ Updated error handling
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw errorData; // Throw the error data to be caught below
+        }
+
+        const result = await response.json();
+        
+        if (result.success) {
+            showToast(result.message || `Successfully created ${result.count} schedule(s)!`, 'success');
+            // Hide form and reload to show new schedules
+            document.getElementById('scheduleFormCard').style.display = 'none';
+            setTimeout(() => location.reload(), 1500);
+        } else {
+            // ✅ Handle the specific error message from the backend
+            showToast(result.message || 'Failed to save schedules.', 'error');
+            
+            // If there are validation errors, show them
+            if (result.errors) {
+                console.error('Validation errors:', result.errors);
+                Object.entries(result.errors).forEach(([field, messages]) => {
+                    messages.forEach(msg => showToast(msg, 'error'));
+                });
+            }
+        }
+    } catch (error) {
+        console.error('Error saving schedules:', error);
+        
+        // ✅ Show the specific error message from backend
+        const errorMessage = error.message || 'An unexpected error occurred while saving schedules.';
+        showToast(errorMessage, 'error');
+        
+        // If there are validation errors in the catch block
+        if (error.errors) {
+            console.error('Validation errors:', error.errors);
+        }
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalText;
+    }
+}

@@ -11,9 +11,13 @@ class User extends Authenticatable
 
     protected $fillable = [
         'name',
+        'first_name', 
+        'middle_initial', 
+        'last_name', 
         'email',
         'password',
         'role',
+        'terminal', 
         'contact_number',
         'company_name',
         'company_address',
@@ -22,6 +26,7 @@ class User extends Authenticatable
         'fleet_size',
         'routes_served',
         'photo_url',
+        'status',
     ];
 
     protected $hidden = [
@@ -31,5 +36,24 @@ class User extends Authenticatable
 
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'password' => 'hashed',
     ];
+
+    public function getFullNameAttribute()
+    {
+        $middle = $this->middle_initial ? ' ' . $this->middle_initial . '.' : '';
+        return $this->first_name . $middle . ' ' . $this->last_name;
+    }
+
+    protected static function boot()
+    {
+        parent::boot();
+        
+        static::saving(function ($user) {
+            if ($user->first_name && $user->last_name) {
+                $middle = $user->middle_initial ? ' ' . $user->middle_initial . '.' : '';
+                $user->name = $user->first_name . $middle . ' ' . $user->last_name;
+            }
+        });
+    }
 }

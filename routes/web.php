@@ -44,6 +44,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{id}', [ScheduleController::class, 'destroy'])->name('schedule.destroy');
         Route::get('/available-drivers', [ScheduleController::class, 'getAvailableDrivers'])->name('schedule.available-drivers');
         Route::get('/active', [ScheduleController::class, 'getActiveSchedules'])->name('schedule.active');
+        Route::post('/bulk', [ScheduleController::class, 'storeBulk'])->name('schedule.store.bulk');
     });
 
     // Driver management routes
@@ -79,11 +80,15 @@ Route::middleware('auth')->group(function () {
 
     // Terminal management routes
     Route::prefix('terminal')->group(function () {
+        Route::get('/', [TerminalController::class, 'index'])->name('terminal.panel');
         Route::get('/spaces', [TerminalController::class, 'getSpaces'])->name('terminal.spaces');
         Route::post('/spaces/book', [TerminalController::class, 'bookSpace'])->name('terminal.book');
         Route::put('/spaces/{id}/release', [TerminalController::class, 'releaseSpace'])->name('terminal.release');
         Route::get('/availability', [TerminalController::class, 'checkAvailability'])->name('terminal.availability');
         Route::get('/stats', [TerminalController::class, 'getStats'])->name('terminal.stats');
+        Route::post('/assign-space', [TerminalController::class, 'assignSpace'])->name('terminal.assign-space');
+        Route::get('/get-assignments', [TerminalController::class, 'getAssignments'])->name('terminal.get-assignments');
+        Route::post('/remove-assignment', [TerminalController::class, 'removeAssignment'])->name('terminal.remove-assignment');
     });
 
     // Web API routes for AJAX calls (require web auth)
@@ -117,6 +122,7 @@ Route::middleware('auth')->group(function () {
             Route::get('/available-drivers', [ScheduleController::class, 'getAvailableDrivers'])->name('api.schedules.available-drivers');
             Route::get('/active', [ScheduleController::class, 'getActiveSchedules'])->name('api.schedules.active');
             Route::get('/driver/{driverId}/today', [ScheduleController::class, 'getTodayScheduleForDriver'])->name('api.schedules.driver-today');
+            Route::post('/bulk', [ScheduleController::class, 'storeBulk'])->name('schedule.store.bulk');
         });
     });
 

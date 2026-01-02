@@ -17,32 +17,47 @@
 
     <!-- Search and Filter Section -->
     <div class="card border-0 bg-white shadow-sm mb-4">
-        <div class="card-body">
-            <form method="GET" action="{{ route('routes.panel') }}" class="row g-3">
-                <div class="col-md-4">
-                    <label for="search" class="form-label">Search Routes</label>
-                    <input type="text" id="search" name="search" class="form-control" 
-                           placeholder="Search by name, code, or location..." 
-                           value="{{ request('search') }}">
-                </div>
-                <div class="col-md-3">
-                    <label for="filter_status" class="form-label">Status</label>
-                    <select id="filter_status" name="status" class="form-select">
-                        <option value="">All Status</option>
-                        <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
-                        <option value="inactive" {{ request('status') === 'inactive' ? 'selected' : '' }}>Inactive</option>
-                    </select>
-                </div>
-                <div class="col-md-3 d-flex align-items-end gap-2">
-                    <button type="submit" class="btn btn-outline-primary">
-                        <i class="fas fa-search me-1"></i> Search
-                    </button>
-                    <a href="{{ route('routes.panel') }}" class="btn btn-outline-secondary">
-                        <i class="fas fa-times me-1"></i> Clear
-                    </a>
-                </div>
-            </form>
+    <div class="card-body">
+        <form method="GET" action="{{ route('routes.panel') }}" class="row g-3">
+        <!-- Search -->
+        <div class="col-md-3">
+            <label for="search" class="form-label">Search Routes</label>
+            <input type="text" id="search" name="search" class="form-control"
+                placeholder="Name, code, or location..."
+                value="{{ request('search') }}">
         </div>
+
+        <!-- Status Filter -->
+        <div class="col-md-2">
+            <label for="filter_status" class="form-label">Status</label>
+            <select id="filter_status" name="status" class="form-select">
+            <option value="">All</option>
+            <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
+            <option value="inactive" {{ request('status') === 'inactive' ? 'selected' : '' }}>Inactive</option>
+            </select>
+        </div>
+
+        <!-- Bus Type Filter -->
+        <div class="col-md-2">
+            <label for="filter_bus_type" class="form-label">Bus Type</label>
+            <select id="filter_bus_type" name="bus_type" class="form-select">
+            <option value="">All Types</option>
+            <option value="regular" {{ request('bus_type') === 'regular' ? 'selected' : '' }}>Regular</option>
+            <option value="aircon" {{ request('bus_type') === 'aircon' ? 'selected' : '' }}>Air-Con</option>
+            </select>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="col-md-3 d-flex align-items-end gap-2">
+            <button type="submit" class="btn btn-outline-primary">
+            <i class="fas fa-search me-1"></i> Apply Filters
+            </button>
+            <a href="{{ route('routes.panel') }}" class="btn btn-outline-secondary">
+            <i class="fas fa-times me-1"></i> Clear
+            </a>
+        </div>
+        </form>
+    </div>
     </div>
 
     <!-- Add/Edit Form (Initially Hidden) -->
@@ -60,6 +75,8 @@
                 @csrf
                 <input type="hidden" id="route_id" name="route_id">
                 <input type="hidden" id="method_field" name="_method">
+                <input type="hidden" id="distance_km" name="distance_km">
+                <input type="hidden" id="estimated_duration" name="estimated_duration">
                 <input type="hidden" id="start_coordinates" name="start_coordinates" value="123.920994,10.311008">
                 <input type="hidden" id="end_coordinates" name="end_coordinates">
                 <input type="hidden" id="stops_data" name="stops_data">
@@ -91,6 +108,13 @@
                     </div>
                 </div>
 
+                <!-- Destination Search -->
+                <div class="mb-3">
+                <label for="destinationSearch" class="form-label">Search Destination in Cebu</label>
+                <input type="text" id="destinationSearch" class="form-control" placeholder="Type a destination (e.g., Tabogon, Daanbantayan)">
+                <div id="geocodingResults" class="list-group mt-1" style="max-height: 200px; overflow-y: auto; display: none;"></div>
+                </div>
+
                 <!-- Map for End Location and Stops Selection -->
                 <div class="row mb-4">
                     <div class="col-12">
@@ -118,8 +142,8 @@
                                     </div>
                                     <div class="col-md-4">
                                         <small class="text-primary">
-                                            <i class="fas fa-route text-primary me-1"></i>
-                                            Add Stops (Optional)
+                                        <i class="fas fa-route text-primary me-1"></i>
+                                        Add Pathway (Optional)
                                         </small>
                                     </div>
                                 </div>
@@ -131,7 +155,7 @@
                                         <i class="fas fa-crosshairs me-1"></i>Center to Cebu
                                     </button>
                                     <button type="button" class="btn btn-sm btn-outline-success" id="addStopBtn">
-                                        <i class="fas fa-map-pin me-1"></i>Add Stop
+                                    <i class="fas fa-route me-1"></i>Add Pathway
                                     </button>
                                 </div>
                                 <div class="mt-2" id="stopsList"></div>
@@ -153,67 +177,15 @@
                         <div class="invalid-feedback" id="end_location_error"></div>
                     </div>
                 </div>
-                
-
-                <!-- Route Information -->
-                <div class="row mb-3">
-                    <div class="col-12">
-                        <div class="card bg-light">
-                            <div class="card-body">
-                                <h6 class="card-title"><i class="fas fa-info-circle me-2"></i>Route Information</h6>
-                                <div class="row">
-                                    <div class="col-md-3">
-                                        <label class="form-label">Distance</label>
-                                        <div class="input-group">
-                                            <input type="number" step="0.1" id="distance_km" name="distance_km" class="form-control" readonly placeholder="Auto-calculated">
-                                            <span class="input-group-text">km</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Duration</label>
-                                        <div class="input-group">
-                                            <input type="number" id="estimated_duration" name="estimated_duration" class="form-control" readonly placeholder="Auto-calculated">
-                                            <span class="input-group-text">mins</span>
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Suggested Regular Fare</label>
-                                        <div class="input-group">
-                                            <span class="input-group-text">₱</span>
-                                            <input type="number" step="0.01" id="suggested_regular" class="form-control" readonly placeholder="Auto-calculated">
-                                        </div>
-                                    </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Suggested Aircon Fare</label>
-                                        <div class="input-group">
-                                            <span class="input-group-text">₱</span>
-                                            <input type="number" step="0.01" id="suggested_aircon" class="form-control" readonly placeholder="Auto-calculated">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
 
                 <div class="row">
                     <div class="col-md-3 mb-3">
-                        <label for="regular_price" class="form-label">Regular Fare <span class="text-danger">*</span></label>
-                        <div class="input-group">
-                            <span class="input-group-text">₱</span>
-                            <input type="number" step="0.01" id="regular_price" name="regular_price" class="form-control" required placeholder="15.00">
-                        </div>
-                        <small class="text-muted">Base: ₱15 + ₱2.50-3.50/km</small>
-                        <div class="invalid-feedback" id="regular_price_error"></div>
+                    <label for="route_fare" class="form-label">Route Fare <span class="text-danger">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">₱</span>
+                        <input type="number" step="0.01" id="route_fare" name="route_fare" class="form-control" required readonly>
                     </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="aircon_price" class="form-label">Aircon Fare</label>
-                        <div class="input-group">
-                            <span class="input-group-text">₱</span>
-                            <input type="number" step="0.01" id="aircon_price" name="aircon_price" class="form-control" placeholder="20.00">
-                        </div>
-                        <small class="text-muted">Usually +30% of regular fare</small>
-                        <div class="invalid-feedback" id="aircon_price_error"></div>
+                    <small class="text-muted">Auto-calculated based on distance and bus type</small>
                     </div>
                     <div class="col-md-3 mb-3">
                         <label for="route_status" class="form-label">Status <span class="text-danger">*</span></label>
@@ -224,12 +196,12 @@
                         <div class="invalid-feedback" id="status_error"></div>
                     </div>
                     <div class="col-md-3 mb-3">
-                        <label for="fare_type" class="form-label">Fare Calculation</label>
-                        <select id="fare_type" class="form-select" onchange="calculateFare()">
-                            <option value="low">Conservative (₱2.50/km)</option>
-                            <option value="mid" selected>Standard (₱3.00/km)</option>
-                            <option value="high">Premium (₱3.50/km)</option>
+                        <label for="bus_type" class="form-label">Bus Type <span class="text-danger">*</span></label>
+                        <select id="bus_type" name="bus_type" class="form-select" required>
+                            <option value="regular">Regular (Non Air-Con)</option>
+                            <option value="aircon">Air-Conditioned</option>
                         </select>
+                        <div class="invalid-feedback" id="bus_type_error"></div>
                     </div>
                 </div>
 
@@ -252,8 +224,8 @@
     </div>
 
     <!-- Routes Table -->
-    <div class="card border-0 bg-white shadow-sm">
-        <div class="card-body">
+    <div class="card border-0 bg-white shadow-sm mt-3">
+        <div class="card-body p-0"> 
             @if(isset($routes) && $routes->count() > 0)
             <div class="table-responsive">
                 <table class="table table-hover align-middle mb-0">
@@ -263,10 +235,10 @@
                             <th>Name</th>
                             <th>Start</th>
                             <th>End</th>
-                            <th>Regular Fare</th>
-                            <th>Aircon Fare</th>
+                            <th>Route Fare</th>
                             <th>Duration</th>
                             <th>Distance</th>
+                            <th>Bus Type</th>
                             <th>Status</th>
                             <th width="140px">Actions</th>
                         </tr>
@@ -278,16 +250,22 @@
                             <td>{{ $route->name }}</td>
                             <td>{{ $route->start_location }}</td>
                             <td>{{ $route->end_location }}</td>
-                            <td>₱{{ number_format($route->regular_price, 2) }}</td>
-                            <td>₱{{ number_format($route->aircon_price ?? 0, 2) }}</td>
+                            <td> ₱{{ number_format($route->route_fare ?? ($route->regular_price ?? 0), 2) }}</td>
                             <td>{{ $route->estimated_duration ?? '-' }} mins</td>
                             <td>{{ $route->distance_km ?? '-' }} km</td>
                             <td>
-                                @if($route->status == 'active')
-                                    <span class="badge bg-success">Active</span>
-                                @else
-                                    <span class="badge bg-secondary">Inactive</span>
-                                @endif
+                            @if($route->bus_type == 'aircon')
+                                <span class="badge bg-info">Air-Con</span>
+                            @else
+                                <span class="badge bg-warning text-dark">Regular</span>
+                            @endif
+                            </td>
+                            <td>
+                            @if($route->status == 'active')
+                                <span class="badge bg-success">Active</span>
+                            @else
+                                <span class="badge bg-secondary">Inactive</span>
+                            @endif
                             </td>
                             <td>
                                 <div class="btn-group" role="group">

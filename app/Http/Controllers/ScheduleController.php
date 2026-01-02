@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Carbon\Carbon;
 
 class ScheduleController extends Controller
@@ -39,7 +40,11 @@ class ScheduleController extends Controller
                 $query->where('status', request('status'));
             }
 
-            $schedules = $query->orderBy('date', 'desc')->paginate(10);
+            // ✅ UPDATED: Order by recently created/updated first, then by date
+            $schedules = $query->orderBy('updated_at', 'desc')  // Recently updated first
+                            ->orderBy('created_at', 'desc')  // Then recently created
+                            ->orderBy('date', 'desc')        // Then by schedule date
+                            ->paginate(10);
 
             return view('panels.schedule', compact('routes', 'buses', 'drivers', 'schedules'));
 
@@ -61,74 +66,83 @@ class ScheduleController extends Controller
      */
     public function store(Request $request)
     {
-        try {
-            $validated = $request->validate([
-                'driver_id' => 'required|exists:drivers,id',
-                'route_id' => 'required|exists:routes,id',
-                'bus_id' => 'required|exists:buses,id',
-                'date' => 'required|date|after_or_equal:today',
-                'start_time' => 'required|date_format:H:i',
-                'end_time' => 'required|date_format:H:i|after:start_time',
-                'status' => 'required|in:scheduled,active,completed,cancelled',
-                'notes' => 'nullable|string|max:500'
-            ]);
-            
-            // Get route details for fare calculation
-            $route = Route::find($validated['route_id']);
-            $bus = Bus::find($validated['bus_id']);
-            
-            // Calculate fare based on bus type
+    try {
+        $validated = $request->validate([
+            'driver_id' => 'required|exists:drivers,id',
+            'route_id' => 'required|exists:routes,id',
+            'bus_id' => 'required|exists:buses,id',
+            'date' => 'required|date|after_or_equal:today',
+            'start_time' => 'required|date_format:H:i',
+            'end_time' => 'required|date_format:H:i|after:start_time',
+            'status' => 'required|in:scheduled,active,completed,cancelled',
+            'notes' => 'nullable|string|max:500'
+        ]);
+
+        // Get route details for fare calculation
+        $route = Route::find($validated['route_id']);
+        $bus = Bus::find($validated['bus_id']);
+
+        // Calculate fare based on route fare if available, otherwise use regular/aircon prices
+        $fare_regular = 0;
+        $fare_aircon = 0;
+
+        // Prioritize route_fare if it exists
+        if ($route->route_fare) {
+            $fare_regular = $route->route_fare;
+            $fare_aircon = $route->route_fare;
+        } else {
+            // Fallback to regular and aircon prices
             $fare_regular = $route->regular_price ?? 0;
             $fare_aircon = $route->aircon_price ?? $fare_regular;
-            
-            $isAircon = $bus && $bus->accommodation_type === 'air-conditioned';
-            
-            $schedule = Schedule::create([
-                'driver_id' => $validated['driver_id'],
-                'route_id' => $validated['route_id'],
-                'bus_id' => $validated['bus_id'],
-                'date' => $validated['date'],
-                'start_time' => $validated['start_time'],
-                'end_time' => $validated['end_time'],
-                'status' => 'scheduled', // <-- force status to 'scheduled'
-                'fare_regular' => $fare_regular,
-                'fare_aircon' => $fare_aircon,
-                'notes' => $validated['notes']
-            ]);
-            
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Schedule created successfully',
-                    'schedule' => $schedule->load(['driver', 'route', 'bus'])
-                ], 201);
-            }
-            
-            return redirect()->route('schedule.panel')->with('success', 'Schedule created successfully');
-            
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation failed',
-                    'errors' => $e->errors()
-                ], 422);
-            }
-            
-            return redirect()->back()->withErrors($e->errors())->withInput();
-            
-        } catch (\Exception $e) {
-            Log::error("Error creating schedule: " . $e->getMessage());
-            
-            if ($request->expectsJson()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Error creating schedule: ' . $e->getMessage()
-                ], 500);
-            }
-            
-            return redirect()->back()->with('error', 'Error creating schedule')->withInput();
         }
+
+        // If bus is air-con, use aircon fare
+        if ($bus && $bus->accommodation_type === 'air-conditioned') {
+            $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
+        }
+
+        $schedule = Schedule::create([
+            'driver_id' => $validated['driver_id'],
+            'route_id' => $validated['route_id'],
+            'bus_id' => $validated['bus_id'],
+            'date' => $validated['date'],
+            'start_time' => $validated['start_time'],
+            'end_time' => $validated['end_time'],
+            'status' => 'scheduled',
+            'fare_regular' => $fare_regular,
+            'fare_aircon' => $fare_aircon,
+            'notes' => $validated['notes'],
+            'created_at' => now(),
+            'updated_at' => now()
+        ]);
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Schedule created successfully',
+                'schedule' => $schedule->load(['driver', 'route', 'bus'])
+            ], 201);
+        }
+        return redirect()->route('schedule.panel')->with('success', 'Schedule created successfully');
+    } catch (\Illuminate\Validation\ValidationException $e) {
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        }
+        return redirect()->back()->withErrors($e->errors())->withInput();
+    } catch (\Exception $e) {
+        Log::error("Error creating schedule: " . $e->getMessage());
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error creating schedule: ' . $e->getMessage()
+            ], 500);
+        }
+        return redirect()->back()->with('error', 'Error creating schedule')->withInput();
+    }
     }
     
     /**
@@ -154,7 +168,6 @@ class ScheduleController extends Controller
     {
         try {
             $schedule = Schedule::findOrFail($id);
-            
             $validated = $request->validate([
                 'driver_id' => 'required|exists:drivers,id',
                 'route_id' => 'required|exists:routes,id',
@@ -165,9 +178,38 @@ class ScheduleController extends Controller
                 'status' => 'required|in:scheduled,active,completed,cancelled,accepted,declined',
                 'notes' => 'nullable|string|max:500'
             ]);
+
+            // Get route details for fare calculation
+            $route = Route::find($validated['route_id']);
+            $bus = Bus::find($validated['bus_id']);
+
+            // Calculate fare based on route fare if available, otherwise use regular/aircon prices
+            $fare_regular = 0;
+            $fare_aircon = 0;
+
+            // Prioritize route_fare if it exists
+            if ($route->route_fare) {
+                $fare_regular = $route->route_fare;
+                $fare_aircon = $route->route_fare;
+            } else {
+                // Fallback to regular and aircon prices
+                $fare_regular = $route->regular_price ?? 0;
+                $fare_aircon = $route->aircon_price ?? $fare_regular;
+            }
+
+            // If bus is air-con, use aircon fare
+            if ($bus && $bus->accommodation_type === 'air-conditioned') {
+                $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
+            }
+
+            // ✅ ADDED: Touch updated_at to ensure it appears at top
+            $validated['updated_at'] = now();
             
+            $validated['fare_regular'] = $fare_regular;
+            $validated['fare_aircon'] = $fare_aircon;
+
             $schedule->update($validated);
-            
+
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => true,
@@ -175,19 +217,15 @@ class ScheduleController extends Controller
                     'schedule' => $schedule->load(['driver', 'route', 'bus'])
                 ]);
             }
-            
             return redirect()->route('schedule.panel')->with('success', 'Schedule updated successfully');
-            
         } catch (\Exception $e) {
             Log::error("Error updating schedule: " . $e->getMessage());
-            
             if ($request->expectsJson()) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Error updating schedule: ' . $e->getMessage()
                 ], 500);
             }
-            
             return redirect()->back()->with('error', 'Error updating schedule');
         }
     }
@@ -215,6 +253,131 @@ class ScheduleController extends Controller
             ], 500);
         }
     }
+
+    public function storeBulk(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'schedules' => 'required|array|min:1',
+            'schedules.*.driver_id' => 'required|exists:drivers,id',
+            'schedules.*.route_id' => 'required|exists:routes,id',
+            'schedules.*.bus_id' => 'required|exists:buses,id',
+            'schedules.*.date' => 'required|date|after_or_equal:today',
+            'schedules.*.start_time' => 'required|date_format:H:i',
+            'schedules.*.end_time' => 'required|date_format:H:i',
+        ]);
+        
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+        
+        $schedulesData = $request->schedules;
+        $createdSchedules = [];
+        DB::beginTransaction();
+        try {
+            foreach ($schedulesData as $scheduleData) {
+                $route = Route::find($scheduleData['route_id']);
+                $bus = Bus::find($scheduleData['bus_id']);
+                if (!$route || !$bus) {
+                    throw new \Exception('Invalid route or bus ID.');
+                }
+                
+                // Calculate fare based on route fare if available, otherwise use regular/aircon prices
+                $fare_regular = 0;
+                $fare_aircon = 0;
+                
+                // Prioritize route_fare if it exists
+                if ($route->route_fare) {
+                    $fare_regular = $route->route_fare;
+                    $fare_aircon = $route->route_fare;
+                } else {
+                    // Fallback to regular and aircon prices
+                    $fare_regular = $route->regular_price ?? 0;
+                    $fare_aircon = $route->aircon_price ?? $fare_regular;
+                }
+                
+                // If bus is air-con, use aircon fare
+                if ($bus && $bus->accommodation_type === 'air-conditioned') {
+                    $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
+                }
+                
+                // Check for overlapping schedules
+                $overlappingSchedule = $this->checkForOverlappingSchedules(
+                    $scheduleData['driver_id'],
+                    $scheduleData['date'],
+                    $scheduleData['start_time'],
+                    $scheduleData['end_time']
+                );
+                if ($overlappingSchedule) {
+                    throw new \Exception("Cannot create schedule: Driver '{$overlappingSchedule->driver->name}' already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}. Please choose a different time.");
+                }
+                
+                // Create the schedule with proper fares
+                $schedule = Schedule::create([
+                    'driver_id' => $scheduleData['driver_id'],
+                    'route_id' => $scheduleData['route_id'],
+                    'bus_id' => $scheduleData['bus_id'],
+                    'date' => $scheduleData['date'],
+                    'start_time' => $scheduleData['start_time'],
+                    'end_time' => $scheduleData['end_time'],
+                    'status' => 'scheduled',
+                    'fare_regular' => $fare_regular,
+                    'fare_aircon' => $fare_aircon,
+                    'notes' => $scheduleData['notes'] ?? null,
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+                $createdSchedules[] = $schedule;
+            }
+            DB::commit();
+            return response()->json([
+                'success' => true,
+                'message' => count($createdSchedules) . ' schedule(s) created successfully!',
+                'count' => count($createdSchedules)
+            ], 201);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error("Error creating bulk schedules: " . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Helper method to check if a driver has any overlapping schedules
+     * @param int $driverId
+     * @param string $date
+     * @param string $startTime
+     * @param string $endTime
+     * @return \App\Models\Schedule|null
+     */
+    private function checkForOverlappingSchedules($driverId, $date, $startTime, $endTime)
+    {
+        // Convert times to 24-hour format for comparison if needed
+        // Assuming they are already in H:i format
+
+        return Schedule::where('driver_id', $driverId)
+            ->where('date', $date)
+            ->where(function ($query) use ($startTime, $endTime) {
+                // Overlap condition: New schedule overlaps with existing one
+                // Case 1: New start time is within an existing schedule
+                $query->whereBetween('start_time', [$startTime, $endTime])
+                    // Case 2: New end time is within an existing schedule
+                    ->orWhereBetween('end_time', [$startTime, $endTime])
+                    // Case 3: New schedule completely encompasses an existing one
+                    ->orWhere(function ($subQuery) use ($startTime, $endTime) {
+                        $subQuery->where('start_time', '<=', $startTime)
+                            ->where('end_time', '>=', $endTime);
+                    });
+            })
+            ->first(); // Return the first overlapping schedule found
+    }
+
 
     // ===================================
     // API METHODS (return JSON responses for mobile app)

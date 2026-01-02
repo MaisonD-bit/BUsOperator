@@ -4,10 +4,12 @@ use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-Class CreateBusesTable extends Migration
+return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * @return void
      */
     public function up()
     {
@@ -18,10 +20,11 @@ Class CreateBusesTable extends Migration
             $table->string('model');
             $table->integer('capacity');
             $table->string('bus_company')->nullable();
-            $table->enum('accommodation_type', ['regular', 'air-conditioned', 'deluxe', 'super-deluxe'])
+            $table->enum('accommodation_type', ['regular', 'air-conditioned'])
                   ->default('regular')
                   ->comment('Type of accommodation/comfort level');
-            $table->enum('status', ['active', 'maintenance', 'inactive'])->default('active');
+            $table->enum('status', ['available', 'in_service', 'maintenance', 'out_of_service'])->default('available');
+            $table->enum('terminal', ['north', 'south'])->nullable(); 
             $table->text('description')->nullable();
             $table->timestamps();
             $table->softDeletes();
@@ -30,8 +33,10 @@ Class CreateBusesTable extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * @return void
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('buses');
     }

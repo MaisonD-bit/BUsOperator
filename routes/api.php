@@ -7,6 +7,7 @@ use App\Http\Controllers\DriverController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\BusController;
+use App\Http\Controllers\PaymentController; 
 
 Route::prefix('v1')->group(function () {
 
@@ -16,6 +17,13 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/register', [AuthController::class, 'apiRegister']);
     Route::post('/auth/logout', [AuthController::class, 'apiLogout']);
     Route::get('/auth/user', [AuthController::class, 'getAuthenticatedUser']);
+
+    Route::get('/bus-operators', function () {
+        return \App\Models\User::where('role', 'bus_operator')
+            ->where('status', 'active')
+            ->select('id', 'company_name')
+            ->get();
+    });
     
     Route::prefix('drivers')->group(function () {
         Route::get('/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
@@ -30,11 +38,14 @@ Route::prefix('v1')->group(function () {
     
     // Schedule management routes for mobile app
     Route::prefix('schedules')->group(function () {
+        // Public route - no auth required for commuters to see active buses
+        Route::get('/active', [ScheduleController::class, 'getActiveSchedules'])->withoutMiddleware(['auth:sanctum']);
+        
         // Get all schedules (admin view)
         Route::get('/', [ScheduleController::class, 'index']);
         
         // Get specific schedule
-        Route::get('/{id}', [ScheduleController::class, 'webShow']);
+        Route::get('/{id}', [ScheduleController::class, 'show']);
         
         // Schedule actions for drivers
         Route::put('/{id}/accept', [ScheduleController::class, 'acceptSchedule']);
@@ -61,6 +72,14 @@ Route::prefix('v1')->group(function () {
     Route::get('drivers', [DriverController::class, 'index']);
 });
 
+// Simple simulated checkout page (development only)
+Route::get('/simulated-checkout', function (Request $request) {
+    $amount = $request->query('amount');
+    $ref = $request->query('ref');
+    $route = $request->query('route');
+    return response()->make("<html><body><h1>Simulated Checkout</h1><p>Amount: {$amount}</p><p>Ref: {$ref}</p><p>Route: {$route}</p><p><a href='/'>Return to app</a></p></body></html>");
+});
+
 // Legacy routes for backward compatibility (these might be used by your web panel AJAX calls)
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/user', function (Request $request) {
@@ -75,6 +94,12 @@ Route::middleware(['auth:sanctum'])->group(function () {
 // Alternative routes without version prefix (for your current Ionic setup)
 Route::group(['middleware' => 'api'], function () {
     
+    // Commuter app API routes
+    Route::get('routes', [RouteController::class, 'apiIndex']);
+    Route::get('routes/{id}', [RouteController::class, 'apiShow']);
+    Route::get('buses', [BusController::class, 'apiIndex']);
+    Route::get('buses/{id}', [BusController::class, 'apiShow']);
+    
     // Driver schedules - THE MAIN ROUTE YOUR IONIC APP NEEDS
     Route::get('drivers/{driverId}/schedules', [ScheduleController::class, 'getDriverSchedules']);
     
@@ -86,11 +111,15 @@ Route::group(['middleware' => 'api'], function () {
     
     // Other API endpoints
     Route::get('schedules', [ScheduleController::class, 'index']);
-    Route::get('schedules/{id}', [ScheduleController::class, 'webShow']);
+    Route::get('schedules/active', [ScheduleController::class, 'getActiveSchedules']); // Get only active schedules (must be before schedules/{id})
+    Route::get('schedules/{id}', [ScheduleController::class, 'show']);
     Route::post('schedules', [ScheduleController::class, 'assignToDriver']);
     
     Route::get('drivers/{id}', [DriverController::class, 'show']);
-    Route::get('routes', [RouteController::class, 'index']);
-    Route::get('buses', [BusController::class, 'index']);
     Route::get('drivers', [DriverController::class, 'index']);
+
+    // Payment endpoints
+    Route::post('payments/maya/create', [PaymentController::class, 'createMayaCheckout']);
+    Route::get('payments/maya/verify/{id}', [PaymentController::class, 'verifyMayaPayment']);
+    Route::post('payments/maya/webhook', [PaymentController::class, 'handleWebhook']);
 });

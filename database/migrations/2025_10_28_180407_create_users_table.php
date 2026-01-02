@@ -1,6 +1,6 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Migrations\Migration; 
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
@@ -8,16 +8,22 @@ return new class extends Migration
 {
     /**
      * Run the migrations.
+     *
+     * @return void
      */
-    public function up(): void
+    public function up()
     {
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
+            $table->string('name'); 
+            $table->string('first_name'); 
+            $table->string('middle_initial', 1)->nullable(); 
+            $table->string('last_name'); 
             $table->string('email')->unique();
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
-            $table->string('role')->default('operator');
+            $table->string('role')->default('bus_operator'); 
+            $table->enum('terminal', ['north', 'south'])->nullable(); 
             $table->string('contact_number')->nullable();
             $table->string('company_name')->nullable();
             $table->string('company_address')->nullable();
@@ -26,6 +32,7 @@ return new class extends Migration
             $table->integer('fleet_size')->nullable();
             $table->string('routes_served')->nullable();
             $table->string('photo_url')->nullable();
+            $table->enum('status', ['active', 'inactive', 'suspended'])->default('active');
             $table->rememberToken();
             $table->timestamps();
         });
@@ -48,8 +55,10 @@ return new class extends Migration
 
     /**
      * Reverse the migrations.
+     *
+     * @return void
      */
-    public function down(): void
+    public function down()
     {
         Schema::dropIfExists('users');
         Schema::dropIfExists('password_reset_tokens');

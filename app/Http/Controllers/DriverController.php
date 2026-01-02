@@ -20,20 +20,23 @@ class DriverController extends Controller
      */
     public function index()
     {
+        $userId = auth()->id(); 
+
         $drivers = Driver::with(['schedules' => function($query) {
             $query->where('date', '>=', now()->toDateString())
-                  ->orderBy('date')
-                  ->orderBy('start_time');
+                ->orderBy('date')
+                ->orderBy('start_time');
         }])
+        ->where('user_id', $userId)
         ->orderBy('created_at', 'desc')
         ->paginate(15);
 
         $stats = [
-            'total' => Driver::count(),
-            'active' => Driver::where('status', 'active')->count(),
-            'inactive' => Driver::where('status', 'inactive')->count(),
-            'pending' => Driver::where('status', 'pending')->count(),
-            'onLeave' => Driver::where('status', 'on_leave')->count(),
+            'total' => Driver::where('user_id', $userId)->count(),
+            'active' => Driver::where('user_id', $userId)->where('status', 'active')->count(),
+            'inactive' => Driver::where('user_id', $userId)->where('status', 'inactive')->count(),
+            'pending' => Driver::where('user_id', $userId)->where('status', 'pending')->count(),
+            'onLeave' => Driver::where('user_id', $userId)->where('status', 'on_leave')->count(),
         ];
 
         $routes = BusRoute::all();
@@ -457,6 +460,7 @@ public function profile($id)
                 'emergency_relation' => 'required|string|max:100',
                 'emergency_contact' => 'required|string|max:20',
                 'photo_base64' => 'nullable|string',
+                'user_id' => 'required|exists:users,id',
             ]);
 
             if ($validator->fails()) {
@@ -503,7 +507,8 @@ public function profile($id)
                 'emergency_relation' => $request->emergency_relation,
                 'emergency_contact' => $request->emergency_contact,
                 'photo_url' => $photoUrl,
-                'status' => 'inactive', // Use 'inactive' instead of 'pending'
+                'status' => 'inactive', 
+                'user_id' => $request->user_id,
                 'app_registered' => true,
                 'registration_source' => 'mobile_app'
             ]);
@@ -601,11 +606,18 @@ public function profile($id)
      */
     public function loginFromApp(Request $request)
     {
+        Log::info('===== DRIVER LOGIN ATTEMPT =====', [
+            'email' => $request->email,
+            'timestamp' => now()
+        ]);
+
         $validator = Validator::make($request->all(), [
             'email' => 'required|email',
             'password' => 'required|string'
         ]);
+        
         if ($validator->fails()) {
+            Log::warning('Validation failed', ['errors' => $validator->errors()]);
             return response()->json([
                 'success' => false,
                 'message' => 'Validation failed',
@@ -614,20 +626,63 @@ public function profile($id)
         }
 
         $driver = Driver::where('email', $request->email)->first();
-
-        if (!$driver || !Hash::check($request->password, $driver->password)) { // Make sure Hash::check IS used correctly
+        
+        if (!$driver) {
+            Log::warning('❌ Driver not found', ['email' => $request->email]);
             return response()->json([
                 'success' => false,
                 'message' => 'Invalid email or password'
             ], 401);
         }
-        
+
+        Log::info('✅ Driver found', [
+            'driver_id' => $driver->id,
+            'driver_name' => $driver->name,
+            'driver_email' => $driver->email,
+            'driver_status' => $driver->status,
+            'password_hash' => substr($driver->password, 0, 20) . '...',
+            'provided_password' => str_repeat('*', strlen($request->password))
+        ]);
+
+        if (!Hash::check($request->password, $driver->password)) {
+            Log::warning('❌ Password does not match', [
+                'email' => $request->email,
+                'provided_password_length' => strlen($request->password),
+                'stored_hash_length' => strlen($driver->password)
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid email or password'
+            ], 401);
+        }
+
+        Log::info('✅ Password verified');
+
+        // Check if driver is active
+        if ($driver->status !== 'active') {
+            Log::warning('❌ Driver not active', [
+                'email' => $driver->email,
+                'status' => $driver->status
+            ]);
+            return response()->json([
+                'success' => false,
+                'message' => "Your account is {$driver->status}. Please wait for approval from bus operator."
+            ], 403);
+        }
+
+        Log::info('✅ Login successful', [
+            'driver_id' => $driver->id,
+            'driver_name' => $driver->name
+        ]);
+
         return response()->json([
             'success' => true,
+            'message' => 'Login successful',
             'driver' => [
                 'id' => $driver->id,
                 'name' => $driver->name,
-                'email' => $driver->email
+                'email' => $driver->email,
+                'status' => $driver->status
             ]
         ]);
     }

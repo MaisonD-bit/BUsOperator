@@ -25,6 +25,7 @@ class Driver extends Authenticatable
         'notes',
         'photo_url',
         'app_registered', 
+        'user_id',
     ];
 
     protected $hidden = [
@@ -52,8 +53,13 @@ class Driver extends Authenticatable
         return $this->belongsToMany(Route::class, 'schedules');
     }
 
-    public function setPasswordAttribute($value)
+    // public function setPasswordAttribute($value)
+    // {
+    //     $this->attributes['password'] = Hash::make($value);
+    // }
+
+    public function company()
     {
-        $this->attributes['password'] = Hash::make($value);
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

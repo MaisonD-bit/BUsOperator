@@ -14,9 +14,14 @@ class RouteController extends Controller
      */
     public function index(Request $request)
     {
-        $query = BusRoute::orderBy('created_at', 'desc');
+        $user = auth()->user();
+        $userId = $user->id;
+        $userTerminal = $user->terminal;
 
-        // Apply search filter (name, code, start, end)
+        // Filter routes by user_id AND terminal
+        $query = BusRoute::where('user_id', $userId)->where('terminal', $userTerminal);
+
+        // Apply search filter
         if ($request->filled('search')) {
             $searchTerm = $request->search;
             $query->where(function ($q) use ($searchTerm) {
@@ -27,22 +32,12 @@ class RouteController extends Controller
             });
         }
 
-        // Apply status filter
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        // ✅ Apply bus_type filter
-        if ($request->filled('bus_type')) {
-            $query->where('bus_type', $request->bus_type);
-        }
-
-        $routes = $query->paginate(15);
+        $routes = $query->orderBy('created_at', 'desc')->paginate(15);
 
         $stats = [
-            'total_routes' => BusRoute::count(),
-            'active_routes' => BusRoute::where('status', 'active')->count(),
-            'inactive_routes' => BusRoute::where('status', 'inactive')->count(),
+            'total_routes' => $query->count(),
+            'active_routes' => $query->where('status', 'active')->count(),
+            'inactive_routes' => $query->where('status', 'inactive')->count(),
         ];
 
         return view('panels.routes', compact('routes', 'stats'));
@@ -55,16 +50,21 @@ class RouteController extends Controller
     {
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
-            'code' => 'required|string|max:10|unique:routes',
-            'start_location' => 'required|string|max:255',
-            'end_location' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'route_fare' => 'required|numeric|min:0',
-            'bus_type' => 'required|string|in:regular,aircon', 
+            'code' => 'required|string|max:255|unique:routes,code',
+            'start_location' => 'required|string',
+            'end_location' => 'required|string',
+            'start_coordinates' => 'required|string',
+            'end_coordinates' => 'required|string',
             'distance_km' => 'required|numeric|min:0',
-            'estimated_duration' => 'required|integer|min:1',
-            'status' => 'required|string|in:active,inactive',
+            'estimated_duration' => 'required|integer|min:0',
+            'description' => 'nullable|string',
+            'regular_price' => 'required|numeric|min:0',
+            'aircon_price' => 'required|numeric|min:0',
+            'route_fare' => 'required|numeric|min:0',
+            'bus_type' => 'required|in:regular,aircon',
+            'status' => 'required|in:active,inactive',
             'geometry' => 'required|string',
+            'stops_data' => 'nullable|array',
         ]);
 
         if ($validator->fails()) {
@@ -75,7 +75,11 @@ class RouteController extends Controller
         }
 
         try {
-            $route = BusRoute::create($request->all());
+            $user = auth()->user();
+            $route = BusRoute::create(array_merge($request->all(), [
+                'user_id' => $user->id,
+                'terminal' => $user->terminal // ✅ Assign terminal
+            ]));
 
             return response()->json([
                 'success' => true,
@@ -98,23 +102,14 @@ class RouteController extends Controller
     public function show($id)
     {
         try {
-            $route = BusRoute::with(['stops'])->findOrFail($id);
+            $user = auth()->user();
+            $route = BusRoute::where('user_id', $user->id)
+                ->where('terminal', $user->terminal) // ✅ Filter by terminal
+                ->findOrFail($id);
 
-            // Return geometry AS RAW STRING (do NOT parse it)
-            $geometry = $route->geometry ?? '';
-
-            // Parse stops for display
-            $stopsArr = [];
-            if ($route->relationLoaded('stops') && $route->stops) {
-                $stopsArr = $route->stops->map(function($stop) {
-                    return [
-                        'name' => $stop->name ?? '',
-                        'lat' => $stop->lat ?? null,
-                        'lng' => $stop->lng ?? null,
-                        'stop_order' => $stop->stop_order ?? null
-                    ];
-                })->toArray();
-            }
+            // Get geometry and stops data
+            $geometry = json_decode($route->geometry, true);
+            $stopsArr = $route->stops_data ? json_decode($route->stops_data, true) : [];
 
             return response()->json([
                 'success' => true,
@@ -134,13 +129,13 @@ class RouteController extends Controller
                     'bus_type' => $route->bus_type,
                     'route_fare' => $route->route_fare,
                     'status' => $route->status,
-                    'geometry' => $geometry,        
+                    'terminal' => $route->terminal, // ✅ Return terminal
+                    'geometry' => $geometry,
                     'stops_data' => $stopsArr
                 ]
             ]);
         } catch (\Exception $e) {
-            // Log the actual error
-            \Log::error('Route show error: ' . $e->getMessage());
+            Log::error('Route show error: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Route not found'
@@ -154,6 +149,8 @@ class RouteController extends Controller
     public function update(Request $request, $id)
     {
         $route = BusRoute::findOrFail($id);
+
+        $route = BusRoute::where('user_id', auth()->id())->findOrFail($id);
 
         $validator = Validator::make($request->all(), [
             'name' => 'string|max:255',
@@ -202,6 +199,10 @@ class RouteController extends Controller
     {
         try {
             $route = BusRoute::findOrFail($id);
+
+            $route = BusRoute::where('user_id', auth()->id())->findOrFail($id);
+            $route->delete();
+            return response()->json(['success' => true, 'message' => 'Route deleted successfully']);
             
             // Check if route has active schedules
             $activeSchedules = $route->schedules()
@@ -383,7 +384,7 @@ class RouteController extends Controller
 
     public function getDestinations(Request $request)
     {
-        $origin = $request->query('origin'); // ✅ This is correct
+        $origin = $request->query('origin'); //   This is correct
 
         if (!$origin) {
             return response()->json([

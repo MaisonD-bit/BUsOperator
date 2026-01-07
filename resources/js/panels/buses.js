@@ -1,4 +1,3 @@
-// Simple toast notification function
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
     toast.className = `position-fixed top-0 end-0 m-3 alert alert-${type === 'error' ? 'danger' : type === 'success' ? 'success' : 'info'} alert-dismissible fade show`;
@@ -33,8 +32,10 @@ function showBusModal() {
     modal.show();
 }
 
-// Edit bus function
+// Edit bus function - FIXED
 function editBus(busId) {
+    console.log('Editing bus ID:', busId); // Debug log
+    
     fetch(`/api/buses/${busId}`)
         .then(response => {
             if (!response.ok) {
@@ -43,20 +44,41 @@ function editBus(busId) {
             return response.json();
         })
         .then(data => {
-            // Populate form fields
-            document.getElementById('bus_id').value = data.id;
-            document.getElementById('bus_number').value = data.bus_number || '';
-            document.getElementById('plate_number').value = data.plate_number || '';
-            document.getElementById('model').value = data.model || '';
-            document.getElementById('capacity').value = data.capacity || '';
-            document.getElementById('bus_company').value = data.bus_company || '';
-            document.getElementById('accommodation_type').value = data.accommodation_type || 'regular';
-            document.getElementById('bus_status').value = data.status || 'active';
-            document.getElementById('description').value = data.description || '';
+            console.log('Bus data received:', data); // Debug log
             
-            document.getElementById('method_field').value = 'PUT';
-            document.getElementById('modalTitleText').textContent = 'Edit Bus';
-            document.getElementById('submitText').textContent = 'Update Bus';
+            //   Helper function to safely set element value
+            const setElementValue = (id, value) => {
+                const element = document.getElementById(id);
+                if (element) {
+                    element.value = value || '';
+                    console.log(`Set ${id} to: ${value}`); // Debug log
+                } else {
+                    console.error(`Element with ID '${id}' not found`); // Debug log
+                }
+            };
+            
+            // Populate form fields with safe setter
+            setElementValue('bus_id', data.id);
+            setElementValue('bus_number', data.bus_number);
+            setElementValue('plate_number', data.plate_number);
+            setElementValue('model', data.model);
+            setElementValue('capacity', data.capacity);
+            setElementValue('accommodation_type', data.accommodation_type);
+            setElementValue('bus_status', data.status); //   Note: form field is 'bus_status', not 'status'
+            setElementValue('description', data.description);
+            
+            // Set method field for update
+            const methodField = document.getElementById('method_field');
+            if (methodField) {
+                methodField.value = 'PUT';
+            }
+            
+            // Update modal title and button text
+            const modalTitle = document.getElementById('modalTitleText');
+            const submitText = document.getElementById('submitText');
+            
+            if (modalTitle) modalTitle.textContent = 'Edit Bus';
+            if (submitText) submitText.textContent = 'Update Bus';
             
             clearValidationErrors();
             
@@ -65,8 +87,8 @@ function editBus(busId) {
             modal.show();
         })
         .catch(error => {
-            console.error('Error:', error);
-            showToast('Failed to load bus details', 'error');
+            console.error('Error loading bus:', error);
+            showToast('Failed to load bus details: ' + error.message, 'error');
         });
 }
 
@@ -218,11 +240,13 @@ function showValidationErrors(errors) {
 window.showBusModal = showBusModal;
 window.editBus = editBus;
 window.deleteBus = deleteBus;
-window.clearFilters = clearFilters;
 window.saveBus = saveBus;
+window.clearFilters = clearFilters;
 
 // DOM Content Loaded event listener
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('Buses.js loaded'); // Debug log
+    
     // Ensure CSRF token is available
     if (!document.querySelector('meta[name="csrf-token"]')) {
         console.error('CSRF token meta tag not found!');
@@ -233,6 +257,9 @@ document.addEventListener('DOMContentLoaded', function() {
     const addBusBtn = document.getElementById('addBusBtn');
     if (addBusBtn) {
         addBusBtn.addEventListener('click', showBusModal);
+        console.log('Add bus button listener attached'); // Debug log
+    } else {
+        console.error('Add bus button not found'); // Debug log
     }
     
     // Handle form submission with Enter key

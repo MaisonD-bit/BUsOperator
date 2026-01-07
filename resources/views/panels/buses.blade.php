@@ -259,11 +259,11 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <!-- <div class="col-md-6 mb-3">
                             <label for="bus_company" class="form-label">Bus Company</label>
                             <input type="text" id="bus_company" name="bus_company" class="form-control" placeholder="e.g., JULILA TRANSIT">
                             <div class="invalid-feedback" id="bus_company_error"></div>
-                        </div>
+                        </div> -->
                         <div class="col-md-6 mb-3">
                             <label for="accommodation_type" class="form-label">Accommodation Type <span class="text-danger">*</span></label>
                             <select id="accommodation_type" name="accommodation_type" class="form-select" required>

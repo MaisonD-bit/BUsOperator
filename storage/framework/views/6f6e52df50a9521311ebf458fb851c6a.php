@@ -50,7 +50,7 @@
                         <label for="driver_select" class="form-label fw-bold">Select Driver <span class="text-danger">*</span></label>
                         <select id="driver_select" name="driver_id" class="form-select" required>
                             <option value="">-- Choose Driver --</option>
-                            <?php $__currentLoopData = $drivers; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $driver): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                            <?php $__currentLoopData = $drivers ?? []; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $driver): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
                                 <option value="<?php echo e($driver->id); ?>"><?php echo e($driver->name); ?> (<?php echo e($driver->status); ?>)</option>
                             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
                         </select>
@@ -151,7 +151,7 @@
                     </div>
                 </div>
                 
-                <!-- ✅ Display calculated fare -->
+                <!--   Display calculated fare -->
                 <div class="mt-2">
                     <small class="text-muted">Calculated Fare: <strong class="fare-display text-success">₱0.00</strong></small>
                 </div>

@@ -11,6 +11,7 @@ class Schedule extends Model
     use HasFactory;
 
     protected $fillable = [
+        'user_id',
         'driver_id',
         'route_id',
         'bus_id',
@@ -21,7 +22,6 @@ class Schedule extends Model
         'fare_regular',
         'fare_aircon',
         'terminal_space',
-        'notes',
         'actual_stops',
         'customer_name',
         'contact_number',
@@ -62,7 +62,11 @@ class Schedule extends Model
         return $this->belongsTo(Bus::class);
     }
 
-    // Scopes
+    public function user()
+    {
+        return $this->belongsTo(User::class);
+    }
+
     public function scopeToday($query)
     {
         return $query->whereDate('date', Carbon::today());

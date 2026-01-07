@@ -25,7 +25,9 @@ class Route extends Model
         'bus_type',  
         'status',
         'geometry',
-        'stops_data'
+        'stops_data',
+        'user_id',
+        'terminal',
     ];
 
     protected $casts = [

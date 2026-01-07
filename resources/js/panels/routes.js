@@ -24,22 +24,48 @@ const CEBU_NORTH_TERMINAL = {
     name: "Cebu North Bus Terminal (SM City)"
 };
 
-const NORTHERN_CEBU_BOUNDARY = {
-    // SW (Southwest) corner - made narrower and added bottom spacing
-    swLng: 123.6,      // West boundary (unchanged)
-    swLat: 10.280000,  // Bottom spacing (unchanged)
-    // NE (Northeast) corner  
-    neLng: 124.10,     // East boundary (unchanged)
-    neLat: 11.30       // ← INCREASED HEIGHT to include Daanbantayan (was 11.1, now 11.25)
+const TERMINALS = {
+    north: {
+        coordinates: [123.920994, 10.311008],
+        name: "Cebu North Bus Terminal (SM City)"
+    },
+    south: {
+        coordinates: [123.893356, 10.298361],
+        name: "Cebu South Bus Terminal"
+    }
 };
 
-// ✅ FIXED: Correct boundary check function
-function isPointInNorthernCebu(lng, lat) {
+let userTerminal = null;
+let currentTerminal = null;
+
+const TERMINAL_BOUNDARIES = {
+    north: {
+        swLng: 123.6,
+        swLat: 10.280000,
+        neLng: 124.10,
+        neLat: 11.30
+    },
+    south: {
+        swLng: 123.25,      // West of Cebu City
+        swLat: 9.50,        // South boundary (covers Oslob, Santander)
+        neLng: 123.95,      // East boundary
+        neLat: 10.35        // North boundary (up to Cebu City)
+    }
+};
+
+function getCurrentBoundary() {
+    const terminal = userTerminal || 'north';
+    return TERMINAL_BOUNDARIES[terminal];
+}
+
+//   FIXED: Correct boundary check function
+function isPointInAllowedArea(lng, lat) {
+    const boundary = getCurrentBoundary();
     return (
-        lng >= NORTHERN_CEBU_BOUNDARY.swLng &&
-        lng <= NORTHERN_CEBU_BOUNDARY.neLng &&
-        lat >= NORTHERN_CEBU_BOUNDARY.swLat &&
-        lat <= NORTHERN_CEBU_BOUNDARY.neLat
+        lng >= boundary.swLng &&
+        lng <= boundary.neLng &&
+        lat >= boundary.swLat &&
+        lat <= boundary.neLat
     );
 }
 
@@ -82,65 +108,69 @@ function showValidationErrors(errors) {
     }
 }
 
-// ✅ FIXED: Proper map initialization with boundary
+//   FIXED: Proper map initialization with boundary
 function initializeMap() {
     if (routeMap) {
         routeMap.remove();
     }
+    
+    // ✅ Use current terminal or default to north
+    const terminal = currentTerminal || TERMINALS.north;
+    
     routeMap = new mapboxgl.Map({
         container: 'routeMap',
         style: 'mapbox://styles/mapbox/streets-v11',
-        center: CEBU_COORDINATES.center,
+        center: terminal.coordinates, // ✅ Center on user's terminal
         zoom: CEBU_COORDINATES.zoom
     });
+    
     routeMap.addControl(new mapboxgl.NavigationControl());
 
+    // ✅ Place start marker at user's terminal
     startMarker = new mapboxgl.Marker({ color: 'green' })
-        .setLngLat(CEBU_NORTH_TERMINAL.coordinates)
+        .setLngLat(terminal.coordinates)
         .addTo(routeMap);
 
-    // ✅ FIXED: Single map load event with boundary polygon
     routeMap.on('load', function() {
-        console.log('Cebu map loaded with North Terminal as start point');
+        console.log('Map loaded with terminal:', terminal.name);
 
-        // Define the boundary as a proper rectangle polygon
-        const northernCebuPolygon = {
+        // ✅ USE dynamic boundary
+        const boundary = getCurrentBoundary();
+        
+        const cebuPolygon = {
             type: 'Feature',
             properties: {},
             geometry: {
                 type: 'Polygon',
                 coordinates: [[
-                    [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.swLat], // SW
-                    [NORTHERN_CEBU_BOUNDARY.neLng, NORTHERN_CEBU_BOUNDARY.swLat], // SE
-                    [NORTHERN_CEBU_BOUNDARY.neLng, NORTHERN_CEBU_BOUNDARY.neLat], // NE
-                    [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.neLat], // NW
-                    [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.swLat]  // Back to SW
+                    [boundary.swLng, boundary.swLat],
+                    [boundary.neLng, boundary.swLat],
+                    [boundary.neLng, boundary.neLat],
+                    [boundary.swLng, boundary.neLat],
+                    [boundary.swLng, boundary.swLat]
                 ]]
             }
         };
 
-        // Add the polygon source
-        routeMap.addSource('northern-cebu-boundary', {
+        routeMap.addSource('cebu-boundary', {
             type: 'geojson',
-            data: northernCebuPolygon
+            data: cebuPolygon
         });
 
-        // Add fill layer (blue highlight)
         routeMap.addLayer({
-            id: 'northern-cebu-fill',
+            id: 'cebu-fill',
             type: 'fill',
-            source: 'northern-cebu-boundary',
+            source: 'cebu-boundary',
             paint: {
                 'fill-color': '#0080ff',
                 'fill-opacity': 0.15
             }
         });
 
-        // Add border line
         routeMap.addLayer({
-            id: 'northern-cebu-border',
+            id: 'cebu-border',
             type: 'line',
-            source: 'northern-cebu-boundary',
+            source: 'cebu-boundary',
             paint: {
                 'line-color': '#0080ff',
                 'line-width': 2,
@@ -149,7 +179,6 @@ function initializeMap() {
         });
     });
 
-    // Listen for map clicks
     routeMap.on('click', function(e) {
         if (isAddingStop) {
             addStop(e.lngLat);
@@ -162,86 +191,85 @@ function initializeMap() {
     const resultsContainer = document.getElementById('geocodingResults');
 
     if (searchInput && resultsContainer) {
-    let debounceTimer;
+        let debounceTimer;
 
-    searchInput.addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        clearTimeout(debounceTimer);
+        searchInput.addEventListener('input', (e) => {
+            const query = e.target.value.trim();
+            clearTimeout(debounceTimer);
 
-        if (query.length < 3) {
-        resultsContainer.style.display = 'none';
-        return;
-        }
-
-        debounceTimer = setTimeout(() => {
-        // Restrict to Cebu using bbox: [minLng, minLat, maxLng, maxLat]
-        // Northern Cebu bbox (from your NORTHERN_CEBU_BOUNDARY)
-        const BBOX = `${NORTHERN_CEBU_BOUNDARY.swLng},${NORTHERN_CEBU_BOUNDARY.swLat},${NORTHERN_CEBU_BOUNDARY.neLng},${NORTHERN_CEBU_BOUNDARY.neLat}`;
-        
-        fetch(
-            `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
-            `bbox=${BBOX}&` +
-            `country=PH&` +
-            `types=place,locality,neighborhood,address&` +
-            `access_token=${mapboxgl.accessToken}`
-        )
-        .then(res => res.json())
-        .then(data => {
-            resultsContainer.innerHTML = '';
-            if (data.features && data.features.length > 0) {
-            data.features.forEach(feature => {
-                const item = document.createElement('a');
-                item.href = '#';
-                item.className = 'list-group-item list-group-item-action';
-                item.textContent = feature.place_name;
-                item.onclick = (event) => {
-                event.preventDefault();
-                const [lng, lat] = feature.center;
+            if (query.length < 3) {
                 resultsContainer.style.display = 'none';
-                searchInput.value = feature.place_name;
-
-                // Use existing logic to set destination
-                const coords = { lng, lat };
-                if (isPointInNorthernCebu(lng, lat)) {
-                    if (endMarker) endMarker.remove();
-                    endMarker = new mapboxgl.Marker({ color: 'red' })
-                    .setLngLat(coords)
-                    .addTo(routeMap);
-                    document.getElementById('end_location').value = feature.place_name;
-                    document.getElementById('end_coordinates').value = `${lng},${lat}`;
-                    autoGenerateRouteCode(feature.text);
-                    calculateRouteWithStops();
-                    showToast('Destination set via search!', 'success');
-                } else {
-                    showToast('Location is outside Northern Cebu', 'error');
-                }
-                };
-                resultsContainer.appendChild(item);
-            });
-            resultsContainer.style.display = 'block';
-            } else {
-            resultsContainer.style.display = 'none';
+                return;
             }
-        })
-        .catch(err => {
-            console.error('Geocoding error:', err);
-            resultsContainer.style.display = 'none';
-        });
-        }, 300);
-    });
 
-    // Hide results when clicking elsewhere
-    document.addEventListener('click', (e) => {
-        if (!searchInput.contains(e.target) && !resultsContainer.contains(e.target)) {
-        resultsContainer.style.display = 'none';
-        }
-    });
+            debounceTimer = setTimeout(() => {
+                // ✅ USE dynamic boundary
+                const boundary = getCurrentBoundary();
+                const BBOX = `${boundary.swLng},${boundary.swLat},${boundary.neLng},${boundary.neLat}`;
+                
+                fetch(
+                    `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?` +
+                    `bbox=${BBOX}&` +
+                    `country=PH&` +
+                    `types=place,locality,neighborhood,address&` +
+                    `access_token=${mapboxgl.accessToken}`
+                )
+                .then(res => res.json())
+                .then(data => {
+                    resultsContainer.innerHTML = '';
+                    if (data.features && data.features.length > 0) {
+                        data.features.forEach(feature => {
+                            const item = document.createElement('a');
+                            item.href = '#';
+                            item.className = 'list-group-item list-group-item-action';
+                            item.textContent = feature.place_name;
+                            item.onclick = (event) => {
+                                event.preventDefault();
+                                const [lng, lat] = feature.center;
+                                resultsContainer.style.display = 'none';
+                                searchInput.value = feature.place_name;
+
+                                const coords = { lng, lat };
+                                if (isPointInAllowedArea(lng, lat)) {
+                                    if (endMarker) endMarker.remove();
+                                    endMarker = new mapboxgl.Marker({ color: 'red' })
+                                        .setLngLat(coords)
+                                        .addTo(routeMap);
+                                    document.getElementById('end_location').value = feature.place_name;
+                                    document.getElementById('end_coordinates').value = `${lng},${lat}`;
+                                    autoGenerateRouteCode(feature.text);
+                                    calculateRouteWithStops();
+                                    showToast('Destination set via search!', 'success');
+                                } else {
+                                    const terminalName = (userTerminal === 'south') ? 'Southern Cebu' : 'Northern Cebu';
+                                    showToast(`Location is outside ${terminalName}`, 'error');                                }
+                            };
+                            resultsContainer.appendChild(item);
+                        });
+                        resultsContainer.style.display = 'block';
+                    } else {
+                        resultsContainer.style.display = 'none';
+                    }
+                })
+                .catch(err => {
+                    console.error('Geocoding error:', err);
+                    resultsContainer.style.display = 'none';
+                });
+            }, 300);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!searchInput.contains(e.target) && !resultsContainer.contains(e.target)) {
+                resultsContainer.style.display = 'none';
+            }
+        });
     }
 }
 
 function setEndPoint(coords) {
-    if (!isPointInNorthernCebu(coords.lng, coords.lat)) {
-        showToast('Destination must be in Northern Cebu. Please select a location within the highlighted blue area.', 'error');
+    if (!isPointInAllowedArea(coords.lng, coords.lat)) {
+        const terminalName = (userTerminal === 'south') ? 'Southern Cebu' : 'Northern Cebu';
+        showToast(`Destination must be in ${terminalName}. Please select a location within the highlighted blue area.`, 'error');
         return;
     }
 
@@ -256,7 +284,7 @@ function setEndPoint(coords) {
         document.getElementById('end_location').value = placeName;
         document.getElementById('end_coordinates').value = `${coords.lng},${coords.lat}`;
         autoGenerateRouteCode(placeName);
-        showToast('Destination set! You can now add stops or save route.', 'success');
+        showToast('Destination set! You can now add pathway or save route.', 'success');
         calculateRouteWithStops();
     });
 }
@@ -268,9 +296,10 @@ function autoGenerateRouteCode(placeName) {
 }
 
 function addStop(coords) {
-    // ✅ Validate stop is within boundary
-    if (!isPointInNorthernCebu(coords.lng, coords.lat)) {
-        showToast('Stop must be in Northern Cebu. Please select a location within the highlighted blue area.', 'error');
+    // Validate stop is within boundary
+    if (!isPointInAllowedArea(coords.lng, coords.lat)) {
+        const terminalName = (userTerminal === 'south') ? 'Southern Cebu' : 'Northern Cebu';
+        showToast(`Stop must be in ${terminalName}. Please select a location within the highlighted blue area.`, 'error');
         return;
     }
 
@@ -294,7 +323,7 @@ function addStop(coords) {
         stopMarkers.push(marker);
         updateStopsList();
         calculateRouteWithStops();
-        showToast(`✅ Pathway added: ${placeName}`, 'success');
+        showToast(`Pathway added: ${placeName}`, 'success');
     });
 }
 
@@ -340,11 +369,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 addStopBtn.classList.add('btn-success');
                 addStopBtn.classList.remove('btn-outline-success');
                 addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Click on map to create a pathway';
-                showToast('Click on the highlighted blue area to add a stop. Click again for more stops. Click "Add Stop" again to stop adding.', 'info');
+                showToast('Click on the highlighted blue area to add a stop. Click again for more stops. Click "Add Pathway" again to stop adding.', 'info');
             } else {
                 addStopBtn.classList.remove('btn-success');
                 addStopBtn.classList.add('btn-outline-success');
-                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Stop';
+                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
                 showToast('Stopped adding stops.', 'info');
             }
         });
@@ -362,7 +391,9 @@ window.clearStops = function() {
 function calculateRouteWithStops() {
     if (!endMarker) return;
 
-    let coordinates = [CEBU_NORTH_TERMINAL.coordinates];
+    const terminal = currentTerminal || TERMINALS.north;
+    let coordinates = [terminal.coordinates];
+    
     stops.forEach(stop => {
         coordinates.push([stop.lng, stop.lat]);
     });
@@ -391,15 +422,12 @@ function calculateRouteWithStops() {
                 if (durationInput) durationInput.value = durationMins;
                 if (geometryInput) geometryInput.value = JSON.stringify(route.geometry);
 
-                // ✅ FIX: Call calculateFare AFTER distance is set
                 setTimeout(() => {
                     calculateFare();
                 }, 100);
 
-                // Draw route on map
                 drawRoute(route.geometry);
 
-                // Fit map to route bounds
                 const bounds = route.geometry.coordinates.reduce(function (bounds, coord) {
                     return bounds.extend(coord);
                 }, new mapboxgl.LngLatBounds(route.geometry.coordinates[0], route.geometry.coordinates[0]));
@@ -407,8 +435,6 @@ function calculateRouteWithStops() {
                 if (routeMap) {
                     routeMap.fitBounds(bounds, { padding: { top: 50, bottom: 50, left: 50, right: 50 } });
                 }
-
-                // showToast(`Route calculated! ${distanceKm.toFixed(1)}km, ${durationMins} minutes`, 'success');
             } else {
                 showToast('Unable to calculate route with pathway.', 'error');
             }
@@ -424,7 +450,7 @@ function calculateFare() {
     const busTypeInput = document.getElementById('bus_type');
     const routeFareInput = document.getElementById('route_fare');
 
-    // ✅ Enhanced logging
+    //   Enhanced logging
     console.log('calculateFare called');
     console.log('Distance input:', distanceInput);
     console.log('Bus type input:', busTypeInput);
@@ -474,10 +500,8 @@ function calculateFare() {
     // showToast(`Route fare calculated: ₱${fare.toFixed(2)}`, 'success');
 }
 
-// ✅ Add event listener for bus type change
+//   Add event listener for bus type change
 document.addEventListener('DOMContentLoaded', function() {
-    // ...existing code...
-
     // Recalculate fare when bus type changes
     const busTypeSelect = document.getElementById('bus_type');
     if (busTypeSelect) {
@@ -535,7 +559,7 @@ function clearEndPoint() {
         isAddingStop = false;
         addStopBtn.classList.remove('btn-success');
         addStopBtn.classList.add('btn-outline-success');
-        addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Stop';
+        addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
     }
 
     if (routeMap && routeMap.getLayer('route')) {
@@ -555,7 +579,7 @@ function clearEndPoint() {
 function centerMapToCebu() {
     if (routeMap) {
         routeMap.flyTo({
-            center: CEBU_COORDINATES.center,
+            center: (currentTerminal || TERMINALS.north).coordinates,
             zoom: CEBU_COORDINATES.zoom,
             duration: 2000
         });
@@ -568,16 +592,22 @@ function showAddRouteForm() {
     document.getElementById('routeForm').reset();
     document.getElementById('route_id').value = '';
     document.getElementById('method_field').value = '';
-    document.getElementById('start_location').value = CEBU_NORTH_TERMINAL.name;
-    document.getElementById('start_coordinates').value = `${CEBU_NORTH_TERMINAL.coordinates[0]},${CEBU_NORTH_TERMINAL.coordinates[1]}`;
+    
+    // ✅ Set terminal-based start location
+    const terminal = currentTerminal || TERMINALS.north;
+    document.getElementById('start_location').value = terminal.name;
+    document.getElementById('start_coordinates').value = `${terminal.coordinates[0]},${terminal.coordinates[1]}`;
+    
     document.getElementById('formTitle').innerHTML = '<i class="fas fa-route me-2"></i>Add New Route';
     document.getElementById('saveRouteBtn').innerHTML = '<i class="fas fa-save me-2"></i>Save Route';
     clearValidationErrors();
     document.getElementById('routeFormSection').style.display = 'block';
     document.getElementById('routeFormSection').scrollIntoView({ behavior: 'smooth' });
+    
     setTimeout(() => {
         initializeMap();
-        showToast('Click on the highlighted blue area to select destination from North Terminal', 'info');
+        // ✅ Dynamic message based on terminal
+        showToast(`Click on the highlighted blue area to select destination from ${terminal.name}`, 'info');
         
         document.getElementById('geometry').value = '';
         document.getElementById('stops_data').value = '[]';
@@ -628,6 +658,17 @@ function hideRouteForm() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
+    // ✅ TERMINAL DETECTION MUST BE FIRST!
+    const terminalMeta = document.querySelector('meta[name="user-terminal"]');
+    if (terminalMeta) {
+        userTerminal = terminalMeta.getAttribute('content');
+        currentTerminal = TERMINALS[userTerminal];
+        console.log('🚨 USER TERMINAL LOADED:', userTerminal, currentTerminal);
+    } else {
+        console.error('❌ NO TERMINAL META TAG FOUND!');
+    }
+
+    // Form submission handler
     const form = document.getElementById('routeForm');
     if (form) {
         form.addEventListener('submit', function(e) {
@@ -700,6 +741,47 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    // Add Stop button handler
+    const addStopBtn = document.getElementById('addStopBtn');
+    if (addStopBtn) {
+        addStopBtn.addEventListener('click', function() {
+            if (!endMarker) {
+                showToast('Please select a destination first.', 'error');
+                return;
+            }
+            isAddingStop = !isAddingStop;
+            if (isAddingStop) {
+                addStopBtn.classList.add('btn-success');
+                addStopBtn.classList.remove('btn-outline-success');
+                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Click on map to create a pathway';
+                showToast('Click on the highlighted blue area to add a stop. Click again for more stops. Click "Add Pathway" again to stop adding.', 'info');
+            } else {
+                addStopBtn.classList.remove('btn-success');
+                addStopBtn.classList.add('btn-outline-success');
+                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
+                showToast('Stopped adding stops.', 'info');
+            }
+        });
+    }
+
+    // Bus type change handler
+    const busTypeSelect = document.getElementById('bus_type');
+    if (busTypeSelect) {
+        busTypeSelect.addEventListener('change', function() {
+            console.log('Bus type changed to:', this.value);
+            const distanceInput = document.getElementById('distance_km');
+            if (distanceInput && distanceInput.value) {
+                calculateFare();
+            }
+        });
+    }
+
+    // Modal close handlers
+    const viewModalCloseBtn = document.querySelector('#viewRouteModal .btn-close');
+    if (viewModalCloseBtn) {
+        viewModalCloseBtn.addEventListener('click', hideViewModal);
+    }
+
     const viewModal = document.getElementById('viewRouteModal');
     if (viewModal) {
         viewModal.addEventListener('click', function(e) {
@@ -708,26 +790,37 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
     }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const viewModal = document.getElementById('viewRouteModal');
+            if (viewModal && viewModal.style.display === 'block') {
+                hideViewModal();
+            }
+        }
+    });
 });
 
 window.showAddRouteForm = showAddRouteForm;
 window.hideRouteForm = hideRouteForm;
 window.clearEndPoint = clearEndPoint;
 window.centerMapToCebu = centerMapToCebu;
+window.hideViewModal = hideViewModal;
 window.calculateFare = calculateFare;
 window.clearStops = clearStops;
 
 function editRoute(id) {
-  fetch(`/routes/${id}`)
+  //   FIX: Use correct API endpoint
+  fetch(`/api/routes/${id}`)
     .then(res => res.json())
-    .then(route => {
-      if (!route.success || !route.route) {
+    .then(data => {
+      if (!data.success || !data.route) {
         showToast('Failed to load route details', 'error');
         return;
       }
       showAddRouteForm();
 
-      const r = route.route;
+      const r = data.route;
       // Set form fields
       document.getElementById('route_id').value = r.id;
       document.getElementById('method_field').value = 'PUT';
@@ -763,6 +856,18 @@ function editRoute(id) {
           }
         }
 
+        // Add stop markers
+        stopMarkers = [];
+        stops.forEach(stop => {
+          if (stop.lng && stop.lat) {
+            const marker = new mapboxgl.Marker({ color: 'blue' })
+              .setLngLat([stop.lng, stop.lat])
+              .setPopup(new mapboxgl.Popup().setText(`Stop: ${stop.name || ''}`))
+              .addTo(routeMap);
+            stopMarkers.push(marker);
+          }
+        });
+
         // Update stops list UI
         updateStopsList();
 
@@ -792,6 +897,8 @@ function editRoute(id) {
 
 function deleteRoute(id) {
     if (!confirm('Are you sure you want to delete this route?')) return;
+    
+    //   FIX: Use correct endpoint
     fetch(`/routes/${id}`, {
         method: 'DELETE',
         headers: {
@@ -802,26 +909,39 @@ function deleteRoute(id) {
     .then(res => res.json())
     .then(data => {
         if (data.success) {
-            window.location.reload();
+            showToast('Route deleted successfully', 'success');
+            setTimeout(() => window.location.reload(), 1000);
         } else {
-            alert(data.message || 'Failed to delete route.');
+            showToast(data.message || 'Failed to delete route', 'error');
         }
+    })
+    .catch(error => {
+        console.error('Error deleting route:', error);
+        showToast('Failed to delete route', 'error');
     });
 }
 
 function viewRoute(id) {
-    fetch(`/routes/${id}`)
-        .then(res => res.json())
-        .then(route => {
-            if (!route.success || !route.route) {
+    //   FIX: Use correct API endpoint
+    fetch(`/api/routes/${id}`)
+        .then(res => {
+            if (!res.ok) {
+                throw new Error(`HTTP error! status: ${res.status}`);
+            }
+            return res.json();
+        })
+        .then(data => {
+            if (!data.success || !data.route) {
                 showToast('Failed to load route details', 'error');
                 return;
             }
 
+            const r = data.route;
+
             let stopsHtml = '';
-            if (route.route.stops_data && route.route.stops_data.length) {
+            if (r.stops_data && r.stops_data.length) {
                 stopsHtml = '<ol class="mb-0 ps-3">';
-                route.route.stops_data.forEach((stop, idx) => {
+                r.stops_data.forEach((stop, idx) => {
                     stopsHtml += `<li class="mb-1">${stop.name || stop}</li>`;
                 });
                 stopsHtml += '</ol>';
@@ -833,24 +953,24 @@ function viewRoute(id) {
                 <div class="row">
                     <div class="col-md-6 mb-3">
                         <h6 class="fw-bold mb-3"><i class="fas fa-info-circle me-2"></i>General Info</h6>
-                        <div class="mb-2"><strong>Code:</strong> ${route.route.code || 'N/A'}</div>
-                        <div class="mb-2"><strong>Name:</strong> ${route.route.name || 'N/A'}</div>
-                        <div class="mb-2"><strong>Status:</strong> <span class="badge ${route.route.status === 'active' ? 'bg-success' : 'bg-secondary'}">${route.route.status || 'inactive'}</span></div>
-                        <div class="mb-2"><strong>Description:</strong> ${route.route.description || '-'}</div>
+                        <div class="mb-2"><strong>Code:</strong> ${r.code || 'N/A'}</div>
+                        <div class="mb-2"><strong>Name:</strong> ${r.name || 'N/A'}</div>
+                        <div class="mb-2"><strong>Status:</strong> <span class="badge ${r.status === 'active' ? 'bg-success' : 'bg-secondary'}">${r.status || 'inactive'}</span></div>
+                        <div class="mb-2"><strong>Bus Type:</strong> <span class="badge ${r.bus_type === 'aircon' ? 'bg-info' : 'bg-warning'}">${r.bus_type === 'aircon' ? 'Air-Con' : 'Regular'}</span></div>
+                        <div class="mb-2"><strong>Description:</strong> ${r.description || '-'}</div>
                     </div>
                     <div class="col-md-6 mb-3">
                         <h6 class="fw-bold mb-3"><i class="fas fa-route me-2"></i>Route Details</h6>
-                        <div class="mb-2"><strong>Start:</strong> ${route.route.start_location || 'N/A'}</div>
-                        <div class="mb-2"><strong>End:</strong> ${route.route.end_location || 'N/A'}</div>
-                        <div class="mb-2"><strong>Distance:</strong> ${route.route.distance_km || 'N/A'} km</div>
-                        <div class="mb-2"><strong>Duration:</strong> ${route.route.estimated_duration || 'N/A'} mins</div>
-                        <div class="mb-2"><strong>Regular Fare:</strong> ₱${parseFloat(route.route.regular_price || 0).toFixed(2)}</div>
-                        <div class="mb-2"><strong>Aircon Fare:</strong> ₱${parseFloat(route.route.aircon_price || 0).toFixed(2)}</div>
+                        <div class="mb-2"><strong>Start:</strong> ${r.start_location || 'N/A'}</div>
+                        <div class="mb-2"><strong>End:</strong> ${r.end_location || 'N/A'}</div>
+                        <div class="mb-2"><strong>Distance:</strong> ${r.distance_km || 'N/A'} km</div>
+                        <div class="mb-2"><strong>Duration:</strong> ${r.estimated_duration || 'N/A'} mins</div>
+                        <div class="mb-2"><strong>Route Fare:</strong> ₱${parseFloat(r.route_fare || 0).toFixed(2)}</div>
                     </div>
                 </div>
                 <div class="row mt-3">
                     <div class="col-12">
-                        <h6 class="fw-bold mb-2"><i class="fas fa-map-pin me-2"></i>Stops</h6>
+                        <h6 class="fw-bold mb-2"><i class="fas fa-map-pin me-2"></i>Pathway Stops</h6>
                         ${stopsHtml}
                     </div>
                 </div>
@@ -859,18 +979,24 @@ function viewRoute(id) {
         })
         .catch(error => {
             console.error('Error loading route:', error);
-            showToast('Failed to load route details', 'error');
+            showToast('Failed to load route details: ' + error.message, 'error');
         });
 }
 
 function hideViewModal() {
-    document.getElementById('viewRouteModal').style.display = 'none';
+    const modal = document.getElementById('viewRouteModal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
 }
 
-window.editRoute = editRoute;
-window.deleteRoute = deleteRoute;
-window.viewRoute = viewRoute;
 window.hideViewModal = hideViewModal;
+window.showAddRouteForm = showAddRouteForm;
+window.hideRouteForm = hideRouteForm;
+window.editRoute = editRoute;
+window.viewRoute = viewRoute;
+window.deleteRoute = deleteRoute;
+window.calculateFare = calculateFare;
 
 function getPlaceName(lng, lat, callback) {
     fetch(`https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${mapboxgl.accessToken}`)
@@ -893,7 +1019,7 @@ function initializeMapForEdit(routeData) {
   routeMap = new mapboxgl.Map({
     container: 'routeMap',
     style: 'mapbox://styles/mapbox/streets-v11',
-    center: CEBU_COORDINATES.center,
+    center: (currentTerminal || TERMINALS.north).coordinates,
     zoom: CEBU_COORDINATES.zoom
   });
 
@@ -901,7 +1027,7 @@ function initializeMapForEdit(routeData) {
 
   // Start marker (fixed)
   startMarker = new mapboxgl.Marker({ color: 'green' })
-    .setLngLat(CEBU_NORTH_TERMINAL.coordinates)
+    .setLngLat((currentTerminal || TERMINALS.north).coordinates)
     .addTo(routeMap);
 
   // End marker from saved data
@@ -944,36 +1070,41 @@ function initializeMapForEdit(routeData) {
   }
 
   // Re-enable map click listeners
-  routeMap.on('load', function() {
-    // Re-add boundary polygon (same as initializeMap)
-    const northernCebuPolygon = {
+routeMap.on('load', function() {
+    // ✅ USE dynamic boundary
+    const boundary = getCurrentBoundary();
+    
+    const cebuPolygon = {
       type: 'Feature',
       properties: {},
       geometry: {
         type: 'Polygon',
         coordinates: [[
-          [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.swLat],
-          [NORTHERN_CEBU_BOUNDARY.neLng, NORTHERN_CEBU_BOUNDARY.swLat],
-          [NORTHERN_CEBU_BOUNDARY.neLng, NORTHERN_CEBU_BOUNDARY.neLat],
-          [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.neLat],
-          [NORTHERN_CEBU_BOUNDARY.swLng, NORTHERN_CEBU_BOUNDARY.swLat]
+          [boundary.swLng, boundary.swLat],
+          [boundary.neLng, boundary.swLat],
+          [boundary.neLng, boundary.neLat],
+          [boundary.swLng, boundary.neLat],
+          [boundary.swLng, boundary.swLat]
         ]]
       }
     };
-    routeMap.addSource('northern-cebu-boundary', {
+    
+    routeMap.addSource('cebu-boundary', {
       type: 'geojson',
-      data: northernCebuPolygon
+      data: cebuPolygon
     });
+    
     routeMap.addLayer({
-      id: 'northern-cebu-fill',
+      id: 'cebu-fill',
       type: 'fill',
-      source: 'northern-cebu-boundary',
+      source: 'cebu-boundary',
       paint: { 'fill-color': '#0080ff', 'fill-opacity': 0.15 }
     });
+    
     routeMap.addLayer({
-      id: 'northern-cebu-border',
+      id: 'cebu-border',
       type: 'line',
-      source: 'northern-cebu-boundary',
+      source: 'cebu-boundary',
       paint: { 'line-color': '#0080ff', 'line-width': 2, 'line-dasharray': [2, 2] }
     });
   });

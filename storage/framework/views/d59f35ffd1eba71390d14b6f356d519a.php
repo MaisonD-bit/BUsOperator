@@ -28,7 +28,7 @@
                     <div class="mb-3">
                         <i class="fas fa-route fs-1 text-primary"></i>
                     </div>
-                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeRoutes ?? 0); ?></h2>
+                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeRoutes); ?></h2>
                     <p class="text-muted mb-0">Active Routes</p>
                     <small class="text-primary">Click to manage</small>
                 </div>
@@ -40,7 +40,7 @@
                     <div class="mb-3">
                         <i class="fas fa-bus fs-1 text-success"></i>
                     </div>
-                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeBuses ?? 0); ?></h2>
+                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeBuses); ?></h2>
                     <p class="text-muted mb-0">Buses in Operation</p>
                     <small class="text-success">Click to manage</small>
                 </div>
@@ -52,7 +52,7 @@
                     <div class="mb-3">
                         <i class="fas fa-users fs-1 text-info"></i>
                     </div>
-                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeDrivers ?? 0); ?></h2>
+                    <h2 class="fw-bold text-dark mb-1"><?php echo e($activeDrivers); ?></h2>
                     <p class="text-muted mb-0">Active Drivers</p>
                     <small class="text-info">Click to manage</small>
                 </div>
@@ -64,8 +64,8 @@
                     <div class="mb-3">
                         <i class="fas fa-exclamation-circle fs-1 text-warning"></i>
                     </div>
-                    <h2 class="fw-bold text-dark mb-1"><?php echo e($issues ?? 0); ?></h2>
-                    <p class="text-muted mb-0">Issues Reported</p>
+                    <h2 class="fw-bold text-dark mb-1"><?php echo e($issues); ?></h2>
+                    <p class="text-muted mb-0">Issues Today</p>
                     <small class="text-warning">Click to view</small>
                 </div>
             </div>
@@ -77,7 +77,7 @@
         <div class="col-md-3">
             <div class="card bg-primary text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-1" id="totalSchedulesToday"><?php echo e($todaySchedules ?? 0); ?></h4>
+                    <h4 class="mb-1" id="totalSchedulesToday"><?php echo e($todaySchedules); ?></h4>
                     <small>Today's Schedules</small>
                 </div>
             </div>
@@ -85,7 +85,7 @@
         <div class="col-md-3">
             <div class="card bg-success text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-1" id="activeSchedules"><?php echo e($activeSchedules ?? 0); ?></h4>
+                    <h4 class="mb-1" id="activeSchedules"><?php echo e($activeSchedules); ?></h4>
                     <small>Currently Active</small>
                 </div>
             </div>
@@ -93,7 +93,7 @@
         <div class="col-md-3">
             <div class="card bg-info text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-1" id="completedSchedules"><?php echo e($completedSchedules ?? 0); ?></h4>
+                    <h4 class="mb-1" id="completedSchedules"><?php echo e($completedSchedules); ?></h4>
                     <small>Completed Today</small>
                 </div>
             </div>
@@ -101,7 +101,7 @@
         <div class="col-md-3">
             <div class="card bg-warning text-white">
                 <div class="card-body text-center">
-                    <h4 class="mb-1" id="pendingSchedules"><?php echo e($pendingSchedules ?? 0); ?></h4>
+                    <h4 class="mb-1" id="pendingSchedules"><?php echo e($pendingSchedules); ?></h4>
                     <small>Pending Schedules</small>
                 </div>
             </div>
@@ -113,17 +113,20 @@
         <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h5 class="mb-0"><i class="fas fa-calendar-alt me-2"></i>Recent Schedules</h5>
             <div class="d-flex gap-2 align-items-center">
-                <select id="statusFilter" class="form-select" style="width: 150px; height: 32px; font-size: 0.875rem;">
+                <select id="statusFilter" class="form-select form-select-sm" style="width: 150px;">
                     <option value="">All Statuses</option>
                     <option value="active">Active</option>
                     <option value="scheduled">Scheduled</option>
                     <option value="completed">Completed</option>
                     <option value="cancelled">Cancelled</option>
                 </select>
+                <a href="<?php echo e(route('schedule.panel')); ?>" class="btn btn-primary btn-sm">
+                    <i class="fas fa-calendar-plus me-1"></i> New Schedule
+                </a>
             </div>
         </div>
         <div class="card-body">
-            <?php if(isset($recentSchedules) && $recentSchedules->count() > 0): ?>
+            <?php if($recentSchedules->count() > 0): ?>
             <div class="table-responsive">
                 <table class="table table-hover align-middle" id="schedulesTable">
                     <thead class="table-light">
@@ -134,6 +137,7 @@
                             <th>Date</th>
                             <th>Time</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -171,41 +175,46 @@
                                 </div>
                             </td>
                             <td>
-                                <span class="fw-semibold"><?php echo e(\Carbon\Carbon::parse($schedule->date)->format('d/m/Y')); ?></span>
+                                <span class="fw-semibold"><?php echo e(\Carbon\Carbon::parse($schedule->date)->format('M d, Y')); ?></span>
                                 <br><small class="text-muted"><?php echo e(\Carbon\Carbon::parse($schedule->date)->format('l')); ?></small>
                             </td>
                             <td>
                                 <div class="text-center">
                                     <div class="fw-semibold"><?php echo e(\Carbon\Carbon::parse($schedule->start_time)->format('h:i A')); ?></div>
-                                    <div class="text-muted">to</div>
+                                    <div class="text-muted small">to</div>
                                     <div class="fw-semibold"><?php echo e(\Carbon\Carbon::parse($schedule->end_time)->format('h:i A')); ?></div>
                                 </div>
                             </td>
                             <td>
                                 <?php switch($schedule->status):
                                     case ('active'): ?>
-                                        <span class="badge bg-success fs-6">
+                                        <span class="badge bg-success">
                                             <i class="fas fa-play me-1"></i>Active
                                         </span>
                                         <?php break; ?>
                                     <?php case ('scheduled'): ?>
-                                        <span class="badge bg-primary fs-6">
+                                        <span class="badge bg-primary">
                                             <i class="fas fa-clock me-1"></i>Scheduled
                                         </span>
                                         <?php break; ?>
                                     <?php case ('completed'): ?>
-                                        <span class="badge bg-secondary fs-6">
+                                        <span class="badge bg-secondary">
                                             <i class="fas fa-check me-1"></i>Completed
                                         </span>
                                         <?php break; ?>
                                     <?php case ('cancelled'): ?>
-                                        <span class="badge bg-danger fs-6">
+                                        <span class="badge bg-danger">
                                             <i class="fas fa-times me-1"></i>Cancelled
                                         </span>
                                         <?php break; ?>
                                     <?php default: ?>
-                                        <span class="badge bg-secondary fs-6"><?php echo e(ucfirst($schedule->status)); ?></span>
+                                        <span class="badge bg-secondary"><?php echo e(ucfirst($schedule->status)); ?></span>
                                 <?php endswitch; ?>
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-info" onclick="viewScheduleDetails(<?php echo e($schedule->id); ?>)" title="View Details">
+                                    <i class="fas fa-eye"></i>
+                                </button>
                             </td>
                         </tr>
                         <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -223,7 +232,7 @@
                     </small>
                 </div>
                 <div>
-                    <?php echo e($recentSchedules->links('pagination::bootstrap-4')); ?>
+                    <?php echo e($recentSchedules->links('pagination::bootstrap-5')); ?>
 
                 </div>
             </div>
@@ -231,10 +240,10 @@
             <?php else: ?>
             <div class="text-center py-5">
                 <i class="fas fa-calendar-times fa-3x text-muted mb-3"></i>
-                <h4 class="text-muted">No Recent Schedules</h4>
-                <p class="text-muted">Start by creating your first schedule</p>
+                <h4 class="text-muted">No Schedules Yet</h4>
+                <p class="text-muted">You haven't created any schedules. Start by creating your first schedule.</p>
                 <a href="<?php echo e(route('schedule.panel')); ?>" class="btn btn-primary">
-                    <i class="fas fa-plus me-1"></i> Create Schedule
+                    <i class="fas fa-plus me-1"></i> Create First Schedule
                 </a>
             </div>
             <?php endif; ?>
@@ -246,24 +255,24 @@
         <div class="col-md-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Daily Performance</h6>
+                    <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>Today's Performance</h6>
                 </div>
                 <div class="card-body">
                     <div class="row text-center">
                         <div class="col-4">
                             <div class="border-end">
-                                <h4 class="text-success mb-1"><?php echo e($performanceStats['onTime'] ?? 0); ?>%</h4>
+                                <h4 class="text-success mb-1"><?php echo e($performanceStats['onTime']); ?>%</h4>
                                 <small class="text-muted">On Time</small>
                             </div>
                         </div>
                         <div class="col-4">
                             <div class="border-end">
-                                <h4 class="text-warning mb-1"><?php echo e($performanceStats['delayed'] ?? 0); ?>%</h4>
+                                <h4 class="text-warning mb-1"><?php echo e($performanceStats['delayed']); ?>%</h4>
                                 <small class="text-muted">Delayed</small>
                             </div>
                         </div>
                         <div class="col-4">
-                            <h4 class="text-danger mb-1"><?php echo e($performanceStats['cancelled'] ?? 0); ?>%</h4>
+                            <h4 class="text-danger mb-1"><?php echo e($performanceStats['cancelled']); ?>%</h4>
                             <small class="text-muted">Cancelled</small>
                         </div>
                     </div>
@@ -273,70 +282,22 @@
         <div class="col-md-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-light">
-                    <h6 class="mb-0"><i class="fas fa-bell me-2"></i>Quick Alerts</h6>
+                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Quick Info</h6>
                 </div>
                 <div class="card-body">
-                    <div id="alertsList">
-                        <div class="alert alert-warning alert-sm py-2 mb-2">
-                            <i class="fas fa-exclamation-triangle me-2"></i>
-                            <small>Bus CEB-123 needs maintenance check</small>
-                        </div>
-                        <div class="alert alert-info alert-sm py-2 mb-2">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <small>Route DT01 has heavy traffic reported</small>
-                        </div>
-                        <div class="alert alert-success alert-sm py-2 mb-0">
-                            <i class="fas fa-check-circle me-2"></i>
-                            <small>All drivers checked in for today</small>
-                        </div>
+                    <div class="alert alert-info alert-sm py-2 mb-2">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <small>You have <strong><?php echo e($todaySchedules); ?></strong> schedules for today</small>
+                    </div>
+                    <div class="alert alert-success alert-sm py-2 mb-2">
+                        <i class="fas fa-check-circle me-2"></i>
+                        <small><strong><?php echo e($activeSchedules); ?></strong> schedules currently active</small>
+                    </div>
+                    <div class="alert alert-warning alert-sm py-2 mb-0">
+                        <i class="fas fa-clock me-2"></i>
+                        <small><strong><?php echo e($pendingSchedules); ?></strong> schedules pending</small>
                     </div>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Issues Modal -->
-<div class="modal fade" id="issuesModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header bg-warning text-dark">
-                <h5 class="modal-title">
-                    <i class="fas fa-exclamation-circle me-2"></i>Reported Issues
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="list-group" id="issuesList">
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Bus Engine Issue</h6>
-                            <small>2 hours ago</small>
-                        </div>
-                        <p class="mb-1">Bus CEB-456 reported engine overheating on Route CB02</p>
-                        <small class="text-muted">Driver: Maria Santos</small>
-                    </div>
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Route Blockage</h6>
-                            <small>4 hours ago</small>
-                        </div>
-                        <p class="mb-1">Construction work blocking main route on DT01</p>
-                        <small class="text-muted">Reported by: Traffic Control</small>
-                    </div>
-                    <div class="list-group-item">
-                        <div class="d-flex w-100 justify-content-between">
-                            <h6 class="mb-1">Driver Late</h6>
-                            <small>6 hours ago</small>
-                        </div>
-                        <p class="mb-1">Driver Juan dela Cruz was 15 minutes late for shift</p>
-                        <small class="text-muted">Status: Resolved</small>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-warning">View All Issues</button>
             </div>
         </div>
     </div>
@@ -353,11 +314,13 @@
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body" id="scheduleDetailsContent">
-                <!-- Content loaded dynamically -->
+                <div class="text-center py-4">
+                    <i class="fas fa-spinner fa-spin fa-2x text-primary"></i>
+                    <p class="mt-2">Loading...</p>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="editFromModal()">Edit Schedule</button>
             </div>
         </div>
     </div>

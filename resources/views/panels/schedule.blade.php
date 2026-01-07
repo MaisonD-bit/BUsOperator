@@ -50,7 +50,7 @@
                         <label for="driver_select" class="form-label fw-bold">Select Driver <span class="text-danger">*</span></label>
                         <select id="driver_select" name="driver_id" class="form-select" required>
                             <option value="">-- Choose Driver --</option>
-                            @foreach($drivers as $driver)
+                            @foreach($drivers ?? [] as $driver)
                                 <option value="{{ $driver->id }}">{{ $driver->name }} ({{ $driver->status }})</option>
                             @endforeach
                         </select>
@@ -149,7 +149,7 @@
                     </div>
                 </div>
                 
-                <!-- ✅ Display calculated fare -->
+                <!--   Display calculated fare -->
                 <div class="mt-2">
                     <small class="text-muted">Calculated Fare: <strong class="fare-display text-success">₱0.00</strong></small>
                 </div>

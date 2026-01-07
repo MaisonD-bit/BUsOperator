@@ -10,6 +10,7 @@ class Bus extends Model
     use SoftDeletes;
 
     protected $fillable = [
+        'user_id',
         'plate_number',
         'bus_number',
         'model',

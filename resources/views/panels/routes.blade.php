@@ -2,6 +2,8 @@
 
 @section('title', 'Routes')
 
+<meta name="user-terminal" content="{{ auth()->user()->terminal }}">
+
 @push('styles')
 <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
 @endpush
@@ -98,12 +100,11 @@
                 <!-- Start Location (Fixed) -->
                 <div class="row mb-3">
                     <div class="col-12">
-                        <div class="alert alert-info d-flex align-items-center">
+                        <div class="alert alert-info">
                             <i class="fas fa-info-circle me-2"></i>
-                            <div>
-                                <strong>All routes start from:</strong> Cebu North Bus Terminal (SM City)
-                                <br><small class="text-muted">This is the main departure point for all bus routes</small>
-                            </div>
+                            All routes start from: <strong>{{ auth()->user()->terminal }} Bus Terminal</strong>
+                            <br>
+                            This is the main departure point for your routes.
                         </div>
                     </div>
                 </div>
@@ -121,7 +122,7 @@
                         <div class="card">
                             <div class="card-header bg-light">
                                 <h6 class="mb-0"><i class="fas fa-map-marker-alt me-2"></i>Select Destination & Stops in Cebu</h6>
-                                <small class="text-muted">Click on the map to set the destination (red marker). Add stops by clicking "Add Stop" and then clicking on the map for each stop.</small>
+                                <small class="text-muted">Click on the map to set the destination (red marker). Add a pathway by clicking "Add Pathway" and then clicking on the map for each stop.</small>
                             </div>
                             <div class="card-body p-0">
                                 <div id="routeMap" style="height: 400px; width: 100%;"></div>

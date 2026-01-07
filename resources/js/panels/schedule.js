@@ -709,19 +709,19 @@ document.getElementById('changeDriverBtn')?.addEventListener('click', function()
     currentDriverName = '';
 });
 
-// ✅ Add Schedule Row button listener
+//   Add Schedule Row button listener
 document.getElementById('addScheduleRowBtn')?.addEventListener('click', function() {
     addScheduleRow();
 });
 
-// ✅ Reset schedules form button listener
+//   Reset schedules form button listener
 document.getElementById('resetSchedulesFormBtn')?.addEventListener('click', function() {
     document.getElementById('schedulesContainer').innerHTML = '';
     addScheduleRow();
     showToast('Form reset. Add new schedules.', 'info');
 });
 
-// ✅ Save all schedules button listener
+//   Save all schedules button listener
 document.getElementById('saveAllSchedulesBtn')?.addEventListener('click', function() {
     saveAllSchedules();
 });
@@ -761,7 +761,7 @@ function addScheduleRow() {
     const busSelect = newRow.querySelector('.bus-select');
     const removeBtn = newRow.querySelector('.remove-schedule-row');
 
-    // ✅ Auto-calculate end time when start time or route changes
+    //   Auto-calculate end time when start time or route changes
     if (routeSelect && startTimeInput && endTimeInput) {
         routeSelect.addEventListener('change', () => {
             calculateEndTime(routeSelect, startTimeInput, endTimeInput);
@@ -773,14 +773,14 @@ function addScheduleRow() {
         });
     }
 
-    // ✅ Update fare when bus type changes
+    //   Update fare when bus type changes
     if (busSelect && routeSelect) {
         busSelect.addEventListener('change', () => {
             updateFareInputs(newRow, routeSelect, busSelect);
         });
     }
 
-    // ✅ Add remove button functionality
+    //   Add remove button functionality
     if (removeBtn) {
         removeBtn.addEventListener('click', function() {
             const rows = container.querySelectorAll('.schedule-row');
@@ -794,7 +794,7 @@ function addScheduleRow() {
     }
 }
 
-// ✅ Function to update hidden fare inputs
+//   Function to update hidden fare inputs
 function updateFareInputs(row, routeSelect, busSelect) {
     if (!routeSelect.value) {
         // Clear fare display if no route selected
@@ -806,7 +806,7 @@ function updateFareInputs(row, routeSelect, busSelect) {
     const selectedRoute = routeSelect.options[routeSelect.selectedIndex];
     const selectedBus = busSelect && busSelect.value ? busSelect.options[busSelect.selectedIndex] : null;
     
-    // ✅ Get fare from route (use route_fare as primary, fallback to regular_price)
+    //   Get fare from route (use route_fare as primary, fallback to regular_price)
     const routeFare = parseFloat(selectedRoute.dataset.routeFare) || 0;
     const regularFare = parseFloat(selectedRoute.dataset.regularFare) || routeFare;
     const airconFare = parseFloat(selectedRoute.dataset.airconFare) || routeFare;
@@ -818,7 +818,7 @@ function updateFareInputs(row, routeSelect, busSelect) {
         dataset: selectedRoute.dataset
     });
     
-    // ✅ Determine which fare to use based on bus type
+    //   Determine which fare to use based on bus type
     let finalFare = routeFare; // Default to route fare
     
     if (selectedBus) {
@@ -827,14 +827,14 @@ function updateFareInputs(row, routeSelect, busSelect) {
         finalFare = isAircon ? airconFare : regularFare;
     }
     
-    // ✅ Update hidden inputs
+    //   Update hidden inputs
     const fareRegularInput = row.querySelector('.fare-regular-input');
     const fareAirconInput = row.querySelector('.fare-aircon-input');
     
     if (fareRegularInput) fareRegularInput.value = regularFare.toFixed(2);
     if (fareAirconInput) fareAirconInput.value = airconFare.toFixed(2);
     
-    // ✅ Update visible fare display
+    //   Update visible fare display
     const fareDisplay = row.querySelector('.fare-display');
     if (fareDisplay) {
         fareDisplay.textContent = `₱${finalFare.toFixed(2)}`;
@@ -886,7 +886,7 @@ async function saveAllSchedules() {
         return;
     }
 
-    // ✅ Validate all rows first
+    //   Validate all rows first
     let isValid = true;
     const schedules = [];
     
@@ -899,7 +899,7 @@ async function saveAllSchedules() {
             if (match) {
                 scheduleData[match[1]] = input.value;
                 
-                // ✅ Basic validation
+                //   Basic validation
                 if (input.hasAttribute('required') && !input.value) {
                     isValid = false;
                     input.classList.add('is-invalid');
@@ -934,7 +934,7 @@ async function saveAllSchedules() {
             body: JSON.stringify({ schedules })
         });
 
-        // ✅ Updated error handling
+        //   Updated error handling
         if (!response.ok) {
             const errorData = await response.json();
             throw errorData; // Throw the error data to be caught below
@@ -948,7 +948,7 @@ async function saveAllSchedules() {
             document.getElementById('scheduleFormCard').style.display = 'none';
             setTimeout(() => location.reload(), 1500);
         } else {
-            // ✅ Handle the specific error message from the backend
+            //   Handle the specific error message from the backend
             showToast(result.message || 'Failed to save schedules.', 'error');
             
             // If there are validation errors, show them
@@ -962,7 +962,7 @@ async function saveAllSchedules() {
     } catch (error) {
         console.error('Error saving schedules:', error);
         
-        // ✅ Show the specific error message from backend
+        //   Show the specific error message from backend
         const errorMessage = error.message || 'An unexpected error occurred while saving schedules.';
         showToast(errorMessage, 'error');
         

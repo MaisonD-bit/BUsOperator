@@ -76,34 +76,43 @@ class BusController extends Controller
             'bus_number' => 'required|string|max:20|unique:buses',
             'model' => 'required|string|max:100',
             'capacity' => 'required|integer|min:1',
-            'bus_company' => 'nullable|string|max:100',
             'accommodation_type' => 'required|in:regular,air-conditioned',
             'status' => 'required|in:available,in_service,maintenance,out_of_service',
             'description' => 'nullable|string|max:500',
         ]);
 
         if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'errors' => $validator->errors()
-            ], 422);
+            return response()->json(['success' => false, 'errors' => $validator->errors()], 422);
         }
 
         try {
-            // Automatically assign the operator's terminal to the bus
-            $busData = $request->all();
-            $busData['terminal'] = $user->terminal;
+            //   FIX: Explicitly set user_id in the array
+            $busData = [
+                'user_id' => $user->id,
+                'plate_number' => $request->plate_number,
+                'bus_number' => $request->bus_number,
+                'model' => $request->model,
+                'capacity' => $request->capacity,
+                'accommodation_type' => $request->accommodation_type,
+                'status' => $request->status,
+                'terminal' => $user->terminal,
+                'bus_company' => $user->company_name,
+                'description' => $request->description,
+            ];
+
+            \Log::info('Creating bus with data:', $busData); //   Debug log
 
             $bus = Bus::create($busData);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Bus added successfully to ' . ucfirst($user->terminal) . ' Terminal',
+                'message' => 'Bus added successfully',
                 'bus' => $bus
             ]);
         } catch (\Exception $e) {
             Log::error('Bus creation error: ' . $e->getMessage());
-            return response()->json(['success' => false, 'message' => 'Failed to add bus'], 500);
+            Log::error('Stack trace: ' . $e->getTraceAsString()); //   More detailed error
+            return response()->json(['success' => false, 'message' => 'Failed to add bus: ' . $e->getMessage()], 500);
         }
     }
 

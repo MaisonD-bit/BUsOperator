@@ -41,7 +41,7 @@ class CheckRoutes extends Command
             $this->info("Casted geometry: " . json_encode($route->geometry));
 
             if (is_array($route->geometry) && isset($route->geometry['coordinates'])) {
-                $this->info("✅ Coordinates count: " . count($route->geometry['coordinates']));
+                $this->info("  Coordinates count: " . count($route->geometry['coordinates']));
             } else {
                 $this->info("❌ Coordinates count: 0 (casting failed)");
             }

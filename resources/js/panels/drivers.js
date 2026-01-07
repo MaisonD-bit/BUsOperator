@@ -1,5 +1,3 @@
-// Driver management functions for the web panel
-// Store current form data globally to preserve it
 let currentFormData = {};
 
 // Toast notification function
@@ -164,6 +162,8 @@ function editDriver(driverId) {
             return response.json();
         })
         .then(data => {
+            console.log('Driver data received:', data); //   Debug log
+            
             // Show form
             const formSection = document.getElementById('addDriverFormSection');
             if (formSection) {
@@ -171,21 +171,62 @@ function editDriver(driverId) {
                 formSection.scrollIntoView({ behavior: 'smooth' });
             }
             
+            //   Helper function to format date for input[type="date"]
+            const formatDateForInput = (dateString) => {
+                if (!dateString) return '';
+                
+                // If already in YYYY-MM-DD format, return as is
+                if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+                    return dateString;
+                }
+                
+                // Try to parse and format the date
+                try {
+                    const date = new Date(dateString);
+                    if (isNaN(date.getTime())) return '';
+                    
+                    const year = date.getFullYear();
+                    const month = String(date.getMonth() + 1).padStart(2, '0');
+                    const day = String(date.getDate()).padStart(2, '0');
+                    
+                    return `${year}-${month}-${day}`;
+                } catch (e) {
+                    console.error('Date parsing error:', e);
+                    return '';
+                }
+            };
+            
             // Populate form fields
             const setFieldValue = (id, value) => {
                 const element = document.getElementById(id);
-                if (element) element.value = value || '';
+                if (element) {
+                    element.value = value || '';
+                    console.log(`Set ${id} to:`, value); //   Debug log
+                }
             };
 
             setFieldValue('driver_id', data.id);
             setFieldValue('name', data.name);
             setFieldValue('email', data.email);
             setFieldValue('contact_number', data.contact_number);
-            setFieldValue('date_of_birth', data.date_of_birth);
+            
+            //   Format and set date fields
+            const formattedDOB = formatDateForInput(data.date_of_birth);
+            const formattedExpiry = formatDateForInput(data.license_expiry);
+            
+            console.log('Formatted dates:', { 
+                original_dob: data.date_of_birth, 
+                formatted_dob: formattedDOB,
+                original_expiry: data.license_expiry,
+                formatted_expiry: formattedExpiry
+            }); //   Debug log
+            
+            setFieldValue('date_of_birth', formattedDOB);
+            setFieldValue('license_expiry', formattedExpiry);
+            
             setFieldValue('gender', data.gender);
             setFieldValue('address', data.address);
             setFieldValue('license_number', data.license_number);
-            setFieldValue('license_expiry', data.license_expiry);
             setFieldValue('emergency_name', data.emergency_name);
             setFieldValue('emergency_relation', data.emergency_relation);
             setFieldValue('emergency_contact', data.emergency_contact);

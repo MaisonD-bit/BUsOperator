@@ -1,5 +1,4 @@
 <?php
-// filepath: c:\Users\User\Desktop\Laravel BusOp\BusOperator\app\Http\Controllers\ScheduleController.php
 
 namespace App\Http\Controllers;
 
@@ -19,12 +18,16 @@ class ScheduleController extends Controller
     public function schedulePanel()
     {
         try {
-            $routes = Route::all();
-            $buses = Bus::all();
-            $drivers = Driver::all();
+            $userId = auth()->id();
+            Log::info("Current user ID: " . $userId);
 
-            // Start query builder
-            $query = Schedule::with(['route', 'bus', 'driver']);
+            // Fetch data for the current operator
+            $routes = Route::where('user_id', $userId)->get();
+            $buses = Bus::where('user_id', $userId)->get();
+            $drivers = Driver::where('user_id', auth()->id())->get();
+
+            // Start query builder for schedules
+            $query = Schedule::with(['route', 'bus', 'driver'])->where('user_id', $userId);
 
             // Apply filters if present
             if (request()->filled('driver')) {
@@ -40,17 +43,15 @@ class ScheduleController extends Controller
                 $query->where('status', request('status'));
             }
 
-            // ✅ UPDATED: Order by recently created/updated first, then by date
-            $schedules = $query->orderBy('updated_at', 'desc')  // Recently updated first
-                            ->orderBy('created_at', 'desc')  // Then recently created
-                            ->orderBy('date', 'desc')        // Then by schedule date
-                            ->paginate(10);
+            $schedules = $query->orderBy('updated_at', 'desc')
+                ->orderBy('created_at', 'desc')
+                ->orderBy('date', 'desc')
+                ->paginate(10);
 
             return view('panels.schedule', compact('routes', 'buses', 'drivers', 'schedules'));
 
         } catch (\Exception $e) {
             Log::error("Error loading schedule panel: " . $e->getMessage());
-
             return view('panels.schedule', [
                 'routes' => collect(),
                 'buses' => collect(),
@@ -66,117 +67,15 @@ class ScheduleController extends Controller
      */
     public function store(Request $request)
     {
-    try {
-        $validated = $request->validate([
-            'driver_id' => 'required|exists:drivers,id',
-            'route_id' => 'required|exists:routes,id',
-            'bus_id' => 'required|exists:buses,id',
-            'date' => 'required|date|after_or_equal:today',
-            'start_time' => 'required|date_format:H:i',
-            'end_time' => 'required|date_format:H:i|after:start_time',
-            'status' => 'required|in:scheduled,active,completed,cancelled',
-            'notes' => 'nullable|string|max:500'
-        ]);
-
-        // Get route details for fare calculation
-        $route = Route::find($validated['route_id']);
-        $bus = Bus::find($validated['bus_id']);
-
-        // Calculate fare based on route fare if available, otherwise use regular/aircon prices
-        $fare_regular = 0;
-        $fare_aircon = 0;
-
-        // Prioritize route_fare if it exists
-        if ($route->route_fare) {
-            $fare_regular = $route->route_fare;
-            $fare_aircon = $route->route_fare;
-        } else {
-            // Fallback to regular and aircon prices
-            $fare_regular = $route->regular_price ?? 0;
-            $fare_aircon = $route->aircon_price ?? $fare_regular;
-        }
-
-        // If bus is air-con, use aircon fare
-        if ($bus && $bus->accommodation_type === 'air-conditioned') {
-            $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
-        }
-
-        $schedule = Schedule::create([
-            'driver_id' => $validated['driver_id'],
-            'route_id' => $validated['route_id'],
-            'bus_id' => $validated['bus_id'],
-            'date' => $validated['date'],
-            'start_time' => $validated['start_time'],
-            'end_time' => $validated['end_time'],
-            'status' => 'scheduled',
-            'fare_regular' => $fare_regular,
-            'fare_aircon' => $fare_aircon,
-            'notes' => $validated['notes'],
-            'created_at' => now(),
-            'updated_at' => now()
-        ]);
-
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Schedule created successfully',
-                'schedule' => $schedule->load(['driver', 'route', 'bus'])
-            ], 201);
-        }
-        return redirect()->route('schedule.panel')->with('success', 'Schedule created successfully');
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $e->errors()
-            ], 422);
-        }
-        return redirect()->back()->withErrors($e->errors())->withInput();
-    } catch (\Exception $e) {
-        Log::error("Error creating schedule: " . $e->getMessage());
-        if ($request->expectsJson()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error creating schedule: ' . $e->getMessage()
-            ], 500);
-        }
-        return redirect()->back()->with('error', 'Error creating schedule')->withInput();
-    }
-    }
-    
-    /**
-     * Display a specific schedule (WEB)
-     */
-    public function show($id)
-    {
         try {
-            $schedule = Schedule::with(['driver', 'route', 'bus'])->findOrFail($id);
-            return response()->json($schedule);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Schedule not found'
-            ], 404);
-        }
-    }
-    
-    /**
-     * Update a schedule (WEB)
-     */
-    public function update(Request $request, $id)
-    {
-        try {
-            $schedule = Schedule::findOrFail($id);
             $validated = $request->validate([
                 'driver_id' => 'required|exists:drivers,id',
                 'route_id' => 'required|exists:routes,id',
                 'bus_id' => 'required|exists:buses,id',
-                'date' => 'required|date',
+                'date' => 'required|date|after_or_equal:today',
                 'start_time' => 'required|date_format:H:i',
                 'end_time' => 'required|date_format:H:i|after:start_time',
-                'status' => 'required|in:scheduled,active,completed,cancelled,accepted,declined',
-                'notes' => 'nullable|string|max:500'
+                'status' => 'required|in:scheduled,active,completed,cancelled',
             ]);
 
             // Get route details for fare calculation
@@ -202,7 +101,107 @@ class ScheduleController extends Controller
                 $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
             }
 
-            // ✅ ADDED: Touch updated_at to ensure it appears at top
+            $schedule = Schedule::create([
+                'user_id' => auth()->id(), // ✅ Add user_id
+                'driver_id' => $validated['driver_id'],
+                'route_id' => $validated['route_id'],
+                'bus_id' => $validated['bus_id'],
+                'date' => $validated['date'],
+                'start_time' => $validated['start_time'],
+                'end_time' => $validated['end_time'],
+                'status' => 'scheduled',
+                'fare_regular' => $fare_regular,
+                'fare_aircon' => $fare_aircon,
+                'created_at' => now(),
+                'updated_at' => now()
+            ]);
+
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Schedule created successfully',
+                    'schedule' => $schedule->load(['driver', 'route', 'bus'])
+                ], 201);
+            }
+            return redirect()->route('schedule.panel')->with('success', 'Schedule created successfully');
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation failed',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            return redirect()->back()->withErrors($e->errors())->withInput();
+        } catch (\Exception $e) {
+            Log::error("Error creating schedule: " . $e->getMessage());
+            if ($request->expectsJson()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Error creating schedule: ' . $e->getMessage()
+                ], 500);
+            }
+            return redirect()->back()->with('error', 'Error creating schedule')->withInput();
+        }
+    }
+    
+    /**
+     * Display a specific schedule (WEB)
+     */
+    public function show($id)
+    {
+        try {
+            $userId = auth()->id();
+            $schedule = Schedule::with(['driver', 'route', 'bus'])
+                ->where('user_id', $userId)
+                ->findOrFail($id);
+            return response()->json($schedule);
+        } catch (\Exception $e) {
+            return response()->json(['success' => false, 'message' => 'Schedule not found'], 404);
+        }
+    }
+    
+    /**
+     * Update a schedule (WEB)
+     */
+    public function update(Request $request, $id)
+    {
+        try {
+            $schedule = Schedule::findOrFail($id);
+            $validated = $request->validate([
+                'driver_id' => 'required|exists:drivers,id',
+                'route_id' => 'required|exists:routes,id',
+                'bus_id' => 'required|exists:buses,id',
+                'date' => 'required|date',
+                'start_time' => 'required|date_format:H:i',
+                'end_time' => 'required|date_format:H:i|after:start_time',
+                'status' => 'required|in:scheduled,active,completed,cancelled,accepted,declined',
+            ]);
+
+            // Get route details for fare calculation
+            $route = Route::find($validated['route_id']);
+            $bus = Bus::find($validated['bus_id']);
+
+            // Calculate fare based on route fare if available, otherwise use regular/aircon prices
+            $fare_regular = 0;
+            $fare_aircon = 0;
+
+            // Prioritize route_fare if it exists
+            if ($route->route_fare) {
+                $fare_regular = $route->route_fare;
+                $fare_aircon = $route->route_fare;
+            } else {
+                // Fallback to regular and aircon prices
+                $fare_regular = $route->regular_price ?? 0;
+                $fare_aircon = $route->aircon_price ?? $fare_regular;
+            }
+
+            // If bus is air-con, use aircon fare
+            if ($bus && $bus->accommodation_type === 'air-conditioned') {
+                $fare_aircon = $route->route_fare ? $route->route_fare : ($route->aircon_price ?? $fare_regular);
+            }
+
+            // Touch updated_at to ensure it appears at top
             $validated['updated_at'] = now();
             
             $validated['fare_regular'] = $fare_regular;
@@ -315,8 +314,9 @@ class ScheduleController extends Controller
                     throw new \Exception("Cannot create schedule: Driver '{$overlappingSchedule->driver->name}' already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}. Please choose a different time.");
                 }
                 
-                // Create the schedule with proper fares
+                // ✅ Create the schedule WITHOUT notes field
                 $schedule = Schedule::create([
+                    'user_id' => auth()->id(),
                     'driver_id' => $scheduleData['driver_id'],
                     'route_id' => $scheduleData['route_id'],
                     'bus_id' => $scheduleData['bus_id'],
@@ -326,7 +326,7 @@ class ScheduleController extends Controller
                     'status' => 'scheduled',
                     'fare_regular' => $fare_regular,
                     'fare_aircon' => $fare_aircon,
-                    'notes' => $scheduleData['notes'] ?? null,
+                    // ✅ REMOVED: 'notes' => $scheduleData['notes'] ?? null,
                     'created_at' => now(),
                     'updated_at' => now(),
                 ]);

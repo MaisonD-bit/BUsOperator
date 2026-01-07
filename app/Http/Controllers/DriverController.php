@@ -83,6 +83,7 @@ class DriverController extends Controller
                 $photoUrl = 'drivers/' . $fileName;
             }
 
+            //   FIX: Automatically set user_id to logged-in user
             $driver = Driver::create([
                 'name' => $request->name,
                 'email' => $request->email,
@@ -101,6 +102,13 @@ class DriverController extends Controller
                 'app_registered' => false,
                 'registration_source' => 'web_admin',
                 'notes' => $request->notes,
+                'user_id' => auth()->id(), //   Automatically set to logged-in user
+            ]);
+
+            Log::info('Driver created successfully from web', [
+                'driver_id' => $driver->id,
+                'driver_name' => $driver->name,
+                'user_id' => auth()->id()
             ]);
 
             return response()->json([
@@ -111,6 +119,7 @@ class DriverController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Driver creation error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to create driver. Please try again.'
@@ -125,8 +134,8 @@ class DriverController extends Controller
     {
         $driver = Driver::with(['schedules' => function($query) {
             $query->with(['route', 'bus'])
-                  ->orderBy('date', 'desc')
-                  ->orderBy('start_time', 'desc');
+                ->orderBy('date', 'desc')
+                ->orderBy('start_time', 'desc');
         }])->findOrFail($id);
 
         $upcomingSchedules = $driver->schedules()
@@ -149,11 +158,11 @@ class DriverController extends Controller
             'name' => $driver->name,
             'email' => $driver->email,
             'contact_number' => $driver->contact_number,
-            'date_of_birth' => $driver->date_of_birth,
+            'date_of_birth' => $driver->date_of_birth ? $driver->date_of_birth->format('Y-m-d') : null,
             'gender' => $driver->gender,
             'address' => $driver->address,
             'license_number' => $driver->license_number,
-            'license_expiry' => $driver->license_expiry,
+            'license_expiry' => $driver->license_expiry ? $driver->license_expiry->format('Y-m-d') : null,
             'emergency_name' => $driver->emergency_name,
             'emergency_relation' => $driver->emergency_relation,
             'emergency_contact' => $driver->emergency_contact,
@@ -180,15 +189,22 @@ class DriverController extends Controller
     {
         $driver = Driver::findOrFail($id);
 
+        if ($driver->user_id !== auth()->id()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized action'
+            ], 403);
+        }
+
         $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:drivers,email,' . $id,
             'contact_number' => 'required|string|max:20',
-            'date_of_birth' => 'required|date',
+            'date_of_birth' => 'required|date|before:today', //   Must be in the past
             'gender' => 'required|string|in:male,female,other',
             'address' => 'required|string',
             'license_number' => 'required|string|unique:drivers,license_number,' . $id,
-            'license_expiry' => 'required|date|after:today',
+            'license_expiry' => 'required|date|after:today', //   Must be in the future
             'emergency_name' => 'string|max:255|nullable',
             'emergency_relation' => 'string|max:100|nullable',
             'emergency_contact' => 'string|max:20|nullable',
@@ -226,7 +242,15 @@ class DriverController extends Controller
                 $updateData['photo_url'] = 'drivers/' . $fileName;
             }
 
+            //   Ensure user_id is not changed during update
+            $updateData['user_id'] = $driver->user_id;
+
             $driver->update($updateData);
+
+            Log::info('Driver updated successfully', [
+                'driver_id' => $driver->id,
+                'updated_fields' => array_keys($updateData)
+            ]);
 
             return response()->json([
                 'success' => true,
@@ -635,7 +659,7 @@ public function profile($id)
             ], 401);
         }
 
-        Log::info('✅ Driver found', [
+        Log::info('  Driver found', [
             'driver_id' => $driver->id,
             'driver_name' => $driver->name,
             'driver_email' => $driver->email,
@@ -656,7 +680,7 @@ public function profile($id)
             ], 401);
         }
 
-        Log::info('✅ Password verified');
+        Log::info('  Password verified');
 
         // Check if driver is active
         if ($driver->status !== 'active') {
@@ -670,7 +694,7 @@ public function profile($id)
             ], 403);
         }
 
-        Log::info('✅ Login successful', [
+        Log::info('  Login successful', [
             'driver_id' => $driver->id,
             'driver_name' => $driver->name
         ]);

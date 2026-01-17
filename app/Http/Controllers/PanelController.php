@@ -113,11 +113,6 @@ class PanelController extends Controller
         ));
     }
 
-    public function notifications()
-    {
-        return view('panels.notifications');
-    }
-
     public function getOperatorStats()
     {
         $userId = Auth::id();

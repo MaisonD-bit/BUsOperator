@@ -58,13 +58,11 @@ class RouteController extends Controller
             'distance_km' => 'required|numeric|min:0',
             'estimated_duration' => 'required|integer|min:0',
             'description' => 'nullable|string',
-            'regular_price' => 'required|numeric|min:0',
-            'aircon_price' => 'required|numeric|min:0',
-            'route_fare' => 'required|numeric|min:0',
+            'route_fare' => 'required|numeric|min:0', // ✅ Changed from regular_price/aircon_price
             'bus_type' => 'required|in:regular,aircon',
             'status' => 'required|in:active,inactive',
             'geometry' => 'required|string',
-            'stops_data' => 'nullable|array',
+            'stops_data' => 'nullable|string', // ✅ Changed from array to string
         ]);
 
         if ($validator->fails()) {
@@ -76,9 +74,26 @@ class RouteController extends Controller
 
         try {
             $user = auth()->user();
-            $route = BusRoute::create(array_merge($request->all(), [
+            
+            // ✅ Parse stops_data if it's a JSON string
+            $data = $request->all();
+            if (isset($data['stops_data']) && is_string($data['stops_data'])) {
+                $data['stops_data'] = json_decode($data['stops_data'], true);
+            }
+            
+            // ✅ Set regular_price and aircon_price based on route_fare and bus_type
+            $routeFare = floatval($data['route_fare']);
+            if ($data['bus_type'] === 'aircon') {
+                $data['aircon_price'] = $routeFare;
+                $data['regular_price'] = round($routeFare / 1.18, 2); // Regular is ~15% less
+            } else {
+                $data['regular_price'] = $routeFare;
+                $data['aircon_price'] = round($routeFare * 1.18, 2); // Aircon is ~18% more
+            }
+            
+            $route = BusRoute::create(array_merge($data, [
                 'user_id' => $user->id,
-                'terminal' => $user->terminal // ✅ Assign terminal
+                'terminal' => $user->terminal
             ]));
 
             return response()->json([
@@ -89,9 +104,10 @@ class RouteController extends Controller
 
         } catch (\Exception $e) {
             Log::error('Route creation error: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
             return response()->json([
                 'success' => false,
-                'message' => 'Failed to create route'
+                'message' => 'Failed to create route: ' . $e->getMessage()
             ], 500);
         }
     }
@@ -129,7 +145,7 @@ class RouteController extends Controller
                     'bus_type' => $route->bus_type,
                     'route_fare' => $route->route_fare,
                     'status' => $route->status,
-                    'terminal' => $route->terminal, // ✅ Return terminal
+                    'terminal' => $route->terminal, 
                     'geometry' => $geometry,
                     'stops_data' => $stopsArr
                 ]
@@ -148,8 +164,6 @@ class RouteController extends Controller
      */
     public function update(Request $request, $id)
     {
-        $route = BusRoute::findOrFail($id);
-
         $route = BusRoute::where('user_id', auth()->id())->findOrFail($id);
 
         $validator = Validator::make($request->all(), [
@@ -158,13 +172,13 @@ class RouteController extends Controller
             'start_location' => 'string|max:255',
             'end_location' => 'string|max:255',
             'description' => 'nullable|string',
-            'regular_price' => 'numeric|min:0',
-            'aircon_price' => 'numeric|min:0',
+            'route_fare' => 'required|numeric|min:0', 
             'distance_km' => 'numeric|min:0',
             'estimated_duration' => 'integer|min:1',
             'bus_type' => 'required|string|in:regular,aircon',
             'status' => 'string|in:active,inactive',
             'geometry' => 'required|string',
+            'stops_data' => 'nullable|string', 
         ]);
 
         if ($validator->fails()) {
@@ -175,7 +189,26 @@ class RouteController extends Controller
         }
 
         try {
-            $route->update($request->all());
+            $data = $request->all();
+            
+            // ✅ Parse stops_data if it's a JSON string
+            if (isset($data['stops_data']) && is_string($data['stops_data'])) {
+                $data['stops_data'] = json_decode($data['stops_data'], true);
+            }
+            
+            // ✅ Update regular_price and aircon_price based on route_fare and bus_type
+            if (isset($data['route_fare']) && isset($data['bus_type'])) {
+                $routeFare = floatval($data['route_fare']);
+                if ($data['bus_type'] === 'aircon') {
+                    $data['aircon_price'] = $routeFare;
+                    $data['regular_price'] = round($routeFare / 1.18, 2);
+                } else {
+                    $data['regular_price'] = $routeFare;
+                    $data['aircon_price'] = round($routeFare * 1.18, 2);
+                }
+            }
+            
+            $route->update($data);
 
             return response()->json([
                 'success' => true,

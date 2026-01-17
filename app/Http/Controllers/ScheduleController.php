@@ -437,16 +437,21 @@ class ScheduleController extends Controller
                 ], 404);
             }
 
+            // ✅ Use Carbon to ensure consistent timezone handling
             $today = Carbon::now()->format('Y-m-d');
+            
+            Log::info("Getting schedules for driver {$driverId}, today is: {$today}");
 
-            // Get all schedules for this driver (including scheduled, accepted, active, completed)
+            // Get all schedules for this driver
             $allSchedules = Schedule::with(['route', 'bus'])
                 ->where('driver_id', $driverId)
-                ->orderBy('date', 'desc') // Show newest first
+                ->orderBy('date', 'desc')
                 ->orderBy('start_time', 'asc')
                 ->get();
 
-            // Categorize schedules
+            Log::info("Total schedules found: " . $allSchedules->count());
+
+            // Categorize schedules based on date comparison
             $todaySchedules = $allSchedules->filter(function($schedule) use ($today) {
                 return $schedule->date === $today;
             })->values();
@@ -458,6 +463,8 @@ class ScheduleController extends Controller
             $pastSchedules = $allSchedules->filter(function($schedule) use ($today) {
                 return $schedule->date < $today;
             })->values();
+
+            Log::info("Categorized schedules - Today: {$todaySchedules->count()}, Upcoming: {$upcomingSchedules->count()}, Past: {$pastSchedules->count()}");
 
             return response()->json([
                 'success' => true,
@@ -471,9 +478,11 @@ class ScheduleController extends Controller
                     'today' => $todaySchedules,
                     'upcoming' => $upcomingSchedules,
                     'past' => $pastSchedules
-                ]
+                ],
+                'current_date' => $today // ✅ Return current date for debugging
             ]);
         } catch (\Exception $e) {
+            Log::error("Error fetching schedules for driver {$driverId}: " . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error fetching schedules: ' . $e->getMessage()
@@ -488,14 +497,6 @@ class ScheduleController extends Controller
     {
         try {
             $schedule = Schedule::findOrFail($id);
-
-            // Ensure the driver is assigned to this schedule
-            // if ($schedule->driver_id !== auth()->id()) {
-            //     return response()->json([
-            //         'success' => false,
-            //         'message' => 'You are not authorized to accept this schedule.'
-            //     ], 403);
-            // }
 
             // Update the schedule status to 'accepted'
             $schedule->status = 'accepted';

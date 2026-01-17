@@ -32,6 +32,10 @@
             <i class="fas fa-building"></i>
             <span>Terminal</span>
         </a>
+        <a href="{{ route('chat.panel') }}" class="nav-item {{ request()->routeIs('chat.*') ? 'active' : '' }}">
+            <i class="fas fa-comments"></i>
+            <span>Chat</span>
+        </a>
         <a href="#" class="nav-item">
             <i class="fas fa-cog"></i>
             <span>Settings</span>

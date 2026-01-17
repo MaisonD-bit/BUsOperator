@@ -31,6 +31,7 @@ return new class extends Migration
             $table->string('company_email')->nullable();
             $table->integer('fleet_size')->nullable();
             $table->string('routes_served')->nullable();
+            $table->string('gender')->nullable();
             $table->string('photo_url')->nullable();
             $table->enum('status', ['active', 'inactive', 'suspended'])->default('active');
             $table->rememberToken();

@@ -227,13 +227,13 @@
 <body>
     <div class="register-container">
         <div class="logo">
-            <img src="{{ asset('images/transitrack_logo.png') }}" alt="TransiTrack Logo" class="logo-img">
+            <img src="<?php echo e(asset('images/transitrack_logo.png')); ?>" alt="TransiTrack Logo" class="logo-img">
             <h1>TransiTrack</h1>
             <p class="subtitle">Register Your Bus Operator Account</p>
         </div>
 
-        <form method="POST" action="{{ route('register.post') }}" enctype="multipart/form-data"> <!-- Updated route name -->
-            @csrf
+        <form method="POST" action="<?php echo e(route('register.post')); ?>" enctype="multipart/form-data"> <!-- Updated route name -->
+            <?php echo csrf_field(); ?>
 
             <!-- Photo Upload Section -->
             <div class="photo-upload-section">
@@ -279,7 +279,7 @@
                                class="form-control"
                                id="first_name"
                                name="first_name"
-                               value="{{ old('first_name') }}"
+                               value="<?php echo e(old('first_name')); ?>"
                                placeholder="Juan"
                                required>
                     </div>
@@ -291,7 +291,7 @@
                                class="form-control"
                                id="middle_initial"
                                name="middle_initial"
-                               value="{{ old('middle_initial') }}"
+                               value="<?php echo e(old('middle_initial')); ?>"
                                placeholder="D"
                                maxlength="1">
                     </div>
@@ -303,7 +303,7 @@
                                class="form-control"
                                id="last_name"
                                name="last_name"
-                               value="{{ old('last_name') }}"
+                               value="<?php echo e(old('last_name')); ?>"
                                placeholder="Dela Cruz"
                                required>
                     </div>
@@ -318,7 +318,7 @@
                                class="form-control"
                                id="email"
                                name="email"
-                               value="{{ old('email') }}"
+                               value="<?php echo e(old('email')); ?>"
                                placeholder="operator@example.com"
                                required>
                     </div>
@@ -337,7 +337,7 @@
                                class="form-control"
                                id="company_name"
                                name="company_name"
-                               value="{{ old('company_name') }}"
+                               value="<?php echo e(old('company_name')); ?>"
                                placeholder="Cebu Bus Lines Inc."
                                required>
                     </div>
@@ -349,7 +349,7 @@
                                class="form-control"
                                id="company_contact"
                                name="company_contact"
-                               value="{{ old('company_contact') }}"
+                               value="<?php echo e(old('company_contact')); ?>"
                                placeholder="+63 32 234 5678"
                                required>
                     </div>
@@ -362,7 +362,7 @@
                        class="form-control"
                        id="company_address"
                        name="company_address"
-                       value="{{ old('company_address') }}"
+                       value="<?php echo e(old('company_address')); ?>"
                        placeholder="123 Street, Cebu City"
                        required>
             </div>
@@ -375,7 +375,7 @@
                                class="form-control"
                                id="company_email"
                                name="company_email"
-                               value="{{ old('company_email') }}"
+                               value="<?php echo e(old('company_email')); ?>"
                                placeholder="info@company.com"
                                required>
                     </div>
@@ -387,7 +387,7 @@
                                class="form-control"
                                id="fleet_size"
                                name="fleet_size"
-                               value="{{ old('fleet_size') }}"
+                               value="<?php echo e(old('fleet_size')); ?>"
                                placeholder="20"
                                min="1"
                                required>
@@ -427,7 +427,7 @@
             <button type="submit" class="btn btn-primary mt-3">Register as Operator</button>
 
             <div class="links mt-3">
-                Already have an account? <a href="{{ route('login') }}">Sign in here</a>
+                Already have an account? <a href="<?php echo e(route('login')); ?>">Sign in here</a>
             </div>
         </form>
 
@@ -455,4 +455,4 @@
         }
     </script>
 </body>
-</html>
+</html><?php /**PATH C:\Users\kylecb\Desktop\BUsOperator\resources\views/register.blade.php ENDPATH**/ ?>

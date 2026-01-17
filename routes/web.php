@@ -91,6 +91,14 @@ Route::middleware('auth')->group(function () {
         Route::post('/remove-assignment', [TerminalController::class, 'removeAssignment'])->name('terminal.remove-assignment');
     });
 
+    // Chat panel routes
+    Route::prefix('chat')->group(function () {
+        Route::get('/', [App\Http\Controllers\ChatController::class, 'index'])->name('chat.panel');
+        Route::post('/create-channel', [App\Http\Controllers\ChatController::class, 'createChannel'])->name('chat.create-channel');
+        Route::get('/users', [App\Http\Controllers\ChatController::class, 'getUsers'])->name('chat.get-users');
+        Route::post('/register-users', [App\Http\Controllers\ChatController::class, 'registerUsers'])->name('chat.register-users');
+    });
+
     // Web API routes for AJAX calls (require web auth)
     Route::prefix('api')->group(function () {
         // Operator stats

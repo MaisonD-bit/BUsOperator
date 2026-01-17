@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use GetStream\StreamChat\Client as StreamChat;
 
 class User extends Authenticatable
 {
@@ -55,5 +56,39 @@ class User extends Authenticatable
                 $user->name = $user->first_name . $middle . ' ' . $user->last_name;
             }
         });
+    }
+
+    /**
+     * Generate a Stream Chat token for the user
+     */
+    public function getStreamToken() : string
+    {
+        $client = new StreamChat(
+            env('STREAM_API_KEY'),
+            env('STREAM_API_SECRET')
+        );
+
+        return $client->createToken((string)$this->id);
+    }
+
+    /**
+     * Get Stream user data
+     */
+    public function getStreamUserData(): array
+    {
+        // Map your app roles to Stream Chat roles
+        $streamRole = match($this->role) {
+            'admin', 'northBusManager', 'southBusManager' => 'admin',
+            'operator' => 'operator',
+            'driver' => 'driver',
+            default => 'user',
+        };
+
+        return [
+            'id' => (string) $this->id,
+            'name' => $this->name,
+            'role' => $streamRole,
+            'image' => $this->photo_url ?? null,
+        ];
     }
 }

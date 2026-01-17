@@ -15,6 +15,7 @@ return new class extends Migration
     {
         Schema::create('buses', function (Blueprint $table) {
             $table->id();
+             $table->foreignId('user_id')->constrained('users')->onDelete('cascade');
             $table->string('plate_number')->unique();
             $table->string('bus_number')->unique();
             $table->string('model');

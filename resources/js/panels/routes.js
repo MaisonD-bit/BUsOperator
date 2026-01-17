@@ -180,10 +180,18 @@ function initializeMap() {
     });
 
     routeMap.on('click', function(e) {
+        console.log('Map clicked at:', e.lngLat);
+        console.log('isAddingStop mode:', isAddingStop);
+        console.log('endMarker exists:', !!endMarker);
+        
         if (isAddingStop) {
+            console.log('Adding pathway stop...');
             addStop(e.lngLat);
         } else if (!endMarker) {
+            console.log('Setting end point...');
             setEndPoint(e.lngLat);
+        } else {
+            console.log('Map click ignored - end marker already set and not in pathway mode');
         }
     });
 
@@ -296,16 +304,19 @@ function autoGenerateRouteCode(placeName) {
 }
 
 function addStop(coords) {
+    console.log('addStop called with coords:', coords);
+    console.log('isAddingStop:', isAddingStop);
+    
     // Validate stop is within boundary
     if (!isPointInAllowedArea(coords.lng, coords.lat)) {
         const terminalName = (userTerminal === 'south') ? 'Southern Cebu' : 'Northern Cebu';
-        showToast(`Stop must be in ${terminalName}. Please select a location within the highlighted blue area.`, 'error');
+        showToast(`Pathway stop must be in ${terminalName}. Please select a location within the highlighted blue area.`, 'error');
         return;
     }
 
     // Prevent adding stop if near the current route line
     if (window.lastRouteGeometry && isPointNearLine(coords, window.lastRouteGeometry.coordinates)) {
-        showToast('Stop is too close to the existing route. Please select a different location.', 'warning');
+        showToast('Pathway stop is too close to the existing route. Please select a different location.', 'warning');
         return;
     }
     
@@ -316,14 +327,17 @@ function addStop(coords) {
             name: placeName
         };
         stops.push(stop);
+        console.log('Pathway stop added:', stop);
+        console.log('Total pathway stops:', stops.length);
+        
         const marker = new mapboxgl.Marker({ color: 'blue' })
             .setLngLat([coords.lng, coords.lat])
-            .setPopup(new mapboxgl.Popup().setText(`Stop: ${placeName}`))
+            .setPopup(new mapboxgl.Popup().setText(`Pathway Stop: ${placeName}`))
             .addTo(routeMap);
         stopMarkers.push(marker);
         updateStopsList();
         calculateRouteWithStops();
-        showToast(`Pathway added: ${placeName}`, 'success');
+        showToast(`Pathway stop added: ${placeName}`, 'success');
     });
 }
 
@@ -332,13 +346,19 @@ function updateStopsList() {
     stopsList.innerHTML = '';
     stops.forEach((stop, idx) => {
         stopsList.innerHTML += `
-            <div class="d-flex align-items-center justify-content-between mb-1">
-                <div>
-                    <span class="badge bg-primary me-2">${idx + 1}</span>
-                    <span>${stop.name}</span>
+            <div class="d-flex align-items-center justify-content-between mb-2 p-2 bg-light rounded">
+                <div class="d-flex align-items-center gap-2" style="flex: 1; min-width: 0;">
+                    <span class="badge bg-primary">${idx + 1}</span>
+                    <span class="text-dark text-truncate">${stop.name}</span>
                 </div>
-                <button type="button" class="btn btn-sm btn-danger ms-2" style="width:7px;min-width:7px;padding:0;" onclick="removeStop(${idx})" title="Remove">
-                    <i class="fas fa-trash" style="font-size:0.8rem;"></i>
+                <button 
+                    type="button" 
+                    class="btn btn-sm btn-danger" 
+                    onclick="removeStop(${idx})" 
+                    title="Remove pathway stop"
+                    style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-left: 8px;"
+                >
+                    <i class="fas fa-times"></i>
                 </button>
             </div>
         `;
@@ -355,30 +375,6 @@ window.removeStop = function(idx) {
     updateStopsList();
     calculateRouteWithStops();
 };
-
-document.addEventListener('DOMContentLoaded', function() {
-    const addStopBtn = document.getElementById('addStopBtn');
-    if (addStopBtn) {
-        addStopBtn.addEventListener('click', function() {
-            if (!endMarker) {
-                showToast('Please select a destination first.', 'error');
-                return;
-            }
-            isAddingStop = !isAddingStop;
-            if (isAddingStop) {
-                addStopBtn.classList.add('btn-success');
-                addStopBtn.classList.remove('btn-outline-success');
-                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Click on map to create a pathway';
-                showToast('Click on the highlighted blue area to add a stop. Click again for more stops. Click "Add Pathway" again to stop adding.', 'info');
-            } else {
-                addStopBtn.classList.remove('btn-success');
-                addStopBtn.classList.add('btn-outline-success');
-                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
-                showToast('Stopped adding stops.', 'info');
-            }
-        });
-    }
-});
 
 window.clearStops = function() {
     stopMarkers.forEach(marker => marker.remove());
@@ -566,13 +562,22 @@ function clearEndPoint() {
         routeMap.removeLayer('route');
         routeMap.removeSource('route');
     }
-    document.getElementById('end_location').value = '';
-    document.getElementById('end_coordinates').value = '';
-    document.getElementById('distance_km').value = '';
-    document.getElementById('estimated_duration').value = '';
-    document.getElementById('regular_price').value = '';
-    document.getElementById('aircon_price').value = '';
-    document.getElementById('geometry').value = '';
+    
+    // ✅ Check if elements exist before setting values
+    const endLocationInput = document.getElementById('end_location');
+    const endCoordinatesInput = document.getElementById('end_coordinates');
+    const distanceInput = document.getElementById('distance_km');
+    const durationInput = document.getElementById('estimated_duration');
+    const routeFareInput = document.getElementById('route_fare');
+    const geometryInput = document.getElementById('geometry');
+    
+    if (endLocationInput) endLocationInput.value = '';
+    if (endCoordinatesInput) endCoordinatesInput.value = '';
+    if (distanceInput) distanceInput.value = '';
+    if (durationInput) durationInput.value = '';
+    if (routeFareInput) routeFareInput.value = '';
+    if (geometryInput) geometryInput.value = '';
+    
     showToast('Destination cleared. Click on map to set new destination.', 'info');
 }
 
@@ -668,6 +673,43 @@ document.addEventListener('DOMContentLoaded', function() {
         console.error('❌ NO TERMINAL META TAG FOUND!');
     }
 
+    // ✅ Add Pathway button handler - SINGLE REGISTRATION
+    const addStopBtn = document.getElementById('addStopBtn');
+    if (addStopBtn) {
+        // Remove any existing listeners first
+        const newAddStopBtn = addStopBtn.cloneNode(true);
+        addStopBtn.parentNode.replaceChild(newAddStopBtn, addStopBtn);
+        
+        // Now add the listener to the fresh button
+        newAddStopBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            console.log('Add Pathway button clicked, isAddingStop:', isAddingStop);
+            
+            if (!endMarker) {
+                showToast('Please select a destination first.', 'error');
+                return;
+            }
+            
+            isAddingStop = !isAddingStop;
+            console.log('isAddingStop toggled to:', isAddingStop);
+            
+            if (isAddingStop) {
+                this.classList.remove('btn-outline-success');
+                this.classList.add('btn-success');
+                this.innerHTML = '<i class="fas fa-map-pin me-1"></i>Click on map to add pathway';
+                showToast('Click on the map (within the blue area) to add pathway stops. Click "Add Pathway" again when done.', 'info');
+            } else {
+                this.classList.remove('btn-success');
+                this.classList.add('btn-outline-success');
+                this.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
+                showToast('Pathway mode disabled.', 'info');
+            }
+        });
+        console.log('Add Pathway button event listener attached');
+    } else {
+        console.error('Add Pathway button not found!');
+    }
+
     // Form submission handler
     const form = document.getElementById('routeForm');
     if (form) {
@@ -685,18 +727,35 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const formData = new FormData(form);
+            
+            // ✅ Ensure start_location is set
+            const terminal = currentTerminal || TERMINALS.north;
+            formData.set('start_location', terminal.name);
+            formData.set('start_coordinates', `${terminal.coordinates[0]},${terminal.coordinates[1]}`);
+            
+            // ✅ Ensure stops_data is stringified
             formData.set('stops_data', JSON.stringify(stops));
             formData.set('geometry', document.getElementById('geometry').value);
+            
+            // ✅ Log form data for debugging
+            console.log('Submitting form data:');
+            for (let [key, value] of formData.entries()) {
+                console.log(`${key}:`, value);
+            }
+            
             const saveBtn = document.getElementById('saveRouteBtn');
             const originalText = saveBtn.innerHTML;
             const routeId = document.getElementById('route_id').value;
             const isEdit = routeId !== '';
+            
             saveBtn.disabled = true;
             saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Saving...';
+            
             const url = isEdit ? `/routes/${routeId}` : '/routes';
             if (isEdit) {
                 formData.append('_method', 'PUT');
             }
+            
             fetch(url, {
                 method: 'POST',
                 body: formData,
@@ -707,7 +766,10 @@ document.addEventListener('DOMContentLoaded', function() {
             })
             .then(response => {
                 if (!response.ok) {
-                    return response.json().then(err => Promise.reject(err));
+                    return response.json().then(err => {
+                        console.error('Server error response:', err);
+                        return Promise.reject(err);
+                    });
                 }
                 return response.json();
             })
@@ -717,6 +779,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     hideRouteForm();
                     setTimeout(() => window.location.reload(), 500);
                 } else if (data && data.errors) {
+                    console.error('Validation errors:', data.errors);
                     showValidationErrors(data.errors);
                     showToast('Please fix the errors in the form.', 'error');
                 } else {
@@ -724,7 +787,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 }
             })
             .catch(error => {
-                console.error('Error:', error);
+                console.error('Catch error:', error);
                 if (error && error.errors) {
                     showValidationErrors(error.errors);
                     showToast('Please fix the errors in the form.', 'error');
@@ -738,29 +801,6 @@ document.addEventListener('DOMContentLoaded', function() {
                 saveBtn.disabled = false;
                 saveBtn.innerHTML = originalText;
             });
-        });
-    }
-
-    // Add Stop button handler
-    const addStopBtn = document.getElementById('addStopBtn');
-    if (addStopBtn) {
-        addStopBtn.addEventListener('click', function() {
-            if (!endMarker) {
-                showToast('Please select a destination first.', 'error');
-                return;
-            }
-            isAddingStop = !isAddingStop;
-            if (isAddingStop) {
-                addStopBtn.classList.add('btn-success');
-                addStopBtn.classList.remove('btn-outline-success');
-                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Click on map to create a pathway';
-                showToast('Click on the highlighted blue area to add a stop. Click again for more stops. Click "Add Pathway" again to stop adding.', 'info');
-            } else {
-                addStopBtn.classList.remove('btn-success');
-                addStopBtn.classList.add('btn-outline-success');
-                addStopBtn.innerHTML = '<i class="fas fa-map-pin me-1"></i>Add Pathway';
-                showToast('Stopped adding stops.', 'info');
-            }
         });
     }
 

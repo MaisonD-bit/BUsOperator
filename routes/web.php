@@ -8,9 +8,9 @@ use App\Http\Controllers\DriverController;
 use App\Http\Controllers\ScheduleController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\TerminalController;
+use App\Http\Controllers\NotificationsController;
 
 // Authentication routes (no auth middleware)
-Route::post('/login', [AuthController::class, 'login'])->name('login.post')->middleware('guest');
 Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login')->middleware('guest');
 Route::post('/login', [AuthController::class, 'login'])->name('login.post')->middleware('guest');
 Route::get('/register', [AuthController::class, 'showRegisterForm'])->name('register')->middleware('guest');
@@ -26,15 +26,23 @@ Route::get('/', function () {
 Route::middleware('auth')->group(function () {
     // Panel routes
     Route::get('/panel/operator', [PanelController::class, 'operatorPanel'])->name('operator.panel');
-    Route::get('/panel/notifications', [PanelController::class, 'notifications'])->name('notifications.panel');
+    
+    // ✅ FIXED: Remove duplicate, keep only NotificationsController route
+    Route::get('/panel/notifications', [NotificationsController::class, 'index'])->name('notifications.panel');    
     Route::get('/panel/schedule', [ScheduleController::class, 'schedulePanel'])->name('schedule.panel');
     Route::get('/panel/routes', [RouteController::class, 'index'])->name('routes.panel');
     Route::get('/panel/drivers', [DriverController::class, 'index'])->name('drivers.panel');
     Route::get('/panel/buses', [BusController::class, 'index'])->name('buses.panel');
     Route::get('/panel/terminal', [TerminalController::class, 'index'])->name('terminal.panel');
 
-    // Driver profile route - FIXED TO USE EXISTING PROFILE VIEW
+    // Driver profile route
     Route::get('/panel/profile/{id}', [DriverController::class, 'profile'])->name('drivers.profile');
+
+    // Notification action routes
+    Route::get('/notifications/unread-count', [NotificationsController::class, 'getUnreadCount']);
+    Route::patch('/notifications/{id}/read', [NotificationsController::class, 'markAsRead']);
+    Route::patch('/notifications/mark-all-read', [NotificationsController::class, 'markAllAsRead']);
+    Route::delete('/notifications/clear-all', [NotificationsController::class, 'clearAll']);
 
     // Schedule management routes
     Route::prefix('schedules')->group(function () {

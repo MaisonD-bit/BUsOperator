@@ -8,6 +8,7 @@ use App\Http\Controllers\AuthController;
 use App\Http\Controllers\RouteController;
 use App\Http\Controllers\BusController;
 use App\Http\Controllers\PaymentController; 
+use App\Http\Controllers\NotificationsController; 
 
 Route::prefix('v1')->group(function () {
 
@@ -67,6 +68,14 @@ Route::prefix('v1')->group(function () {
     Route::prefix('buses')->group(function () {
         Route::get('/', [BusController::class, 'index']);
         Route::get('/{id}', [BusController::class, 'show']);
+    });
+
+    Route::prefix('notifications')->group(function () {
+        Route::get('/driver/{driverId}', [NotificationsController::class, 'getForDriver']);
+        Route::post('/driver-send', [NotificationsController::class, 'sendFromDriver']);
+        Route::post('/operator-send', [NotificationsController::class, 'sendToDriver'])
+            ->middleware(['web', 'auth']); 
+        Route::patch('/{id}/read', [NotificationsController::class, 'markNotificationAsRead']);
     });
 
     Route::get('drivers', [DriverController::class, 'index']);

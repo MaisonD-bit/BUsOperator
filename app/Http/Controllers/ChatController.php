@@ -46,20 +46,20 @@ class ChatController extends Controller
         ]);
 
         try {
+            $currentUserId = (string)Auth::id();
+            
             $channel = $this->streamClient->channel(
                 $request->type,
                 $request->id,
                 [
                     'name' => $request->name,
-                    'created_by' => ['id' => (string)Auth::id()],
+                    'created_by' => ['id' => $currentUserId],
+                    'members' => array_map('strval', array_merge($request->members, [Auth::id()])),
                 ]
             );
 
-            // Convert member IDs to strings
-            $members = array_map(fn($id) => ['user_id' => (string)$id], $request->members);
-
-            $channel->create((string)Auth::id());
-            $channel->addMembers($members);
+            // Create the channel with the current user as creator
+            $channel->create($currentUserId);
 
             return response()->json([
                 'success' => true,
@@ -78,17 +78,20 @@ class ChatController extends Controller
 
     public function getUsers()
     {
-        $users = User::where('id', '!=', Auth::id())
-            ->select(['id', 'first_name', 'last_name', 'photo_url', 'role'])
+        $currentUser = Auth::user();
+        
+        $query = User::where('id', '!=', Auth::id());
+        
+        if ($currentUser && $currentUser->terminal) {
+            $query->where('terminal', $currentUser->terminal);
+        }
+        
+        $users = $query->select(['id', 'first_name', 'last_name', 'photo_url', 'role'])
             ->get()
             ->map(function ($user) {
-
-                $middle = $user->middle_initial ? ' ' . $user->middle_initial . '.' : '';
-                $fullName = $user->first_name . $middle . ' ' . $user->last_name;
-
                 return [
                     'id' => $user->id,
-                    'name' => $fullName,
+                    'name' => $user->name,
                     'photo_url' => $user->photo_url,
                     'role' => $user->role
                 ];

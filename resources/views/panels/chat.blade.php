@@ -26,9 +26,27 @@
         <!-- Chat Area -->
         <div class="col-md-9">
             <div class="card shadow-sm" style="height: calc(100vh - 120px); padding: 0px;">
-                <div class="card-header bg-white border-bottom">
-                    <h5 class="mb-0" id="channel-name" style="font-weight: bold;">Select a channel to start chatting</h5>
-                    <small class="text-muted" id="channel-members"></small>
+                <div class="card-header bg-white border-bottom d-flex justify-content-between align-items-center">
+                    <div>
+                        <h5 class="mb-0" id="channel-name" style="font-weight: bold;">Select a channel to start chatting</h5>
+                        <small class="text-muted" id="channel-members"></small>
+                    </div>
+                    <div class="d-flex gap-2" id="channel-actions" style="display: none !important;">
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-info dropdown-toggle" type="button" id="membersDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fa-solid fa-users"></i> Members
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="membersDropdown" id="members-list" style="max-height: 300px; overflow-y: auto; min-width: 250px;">
+                                <li><span class="dropdown-item-text text-muted">No members</span></li>
+                            </ul>
+                        </div>
+                        <button class="btn btn-sm btn-success" id="add-members-btn">
+                            <i class="fa-solid fa-user-plus"></i> Add
+                        </button>
+                        <button class="btn btn-sm btn-warning" id="leave-channel-btn">
+                            <i class="fa-solid fa-right-from-bracket"></i> Leave
+                        </button>
+                    </div>
                 </div>
                 <div class="card-body overflow-auto" id="messages-container" style="flex: 1; max-height: calc(100vh - 280px);">
                     <div class="text-center text-muted mt-5">
@@ -45,7 +63,7 @@
                             disabled
                         >
                         <button type="submit" class="btn btn-primary" disabled id="send-btn">
-                            <i class="bi bi-send"></i> Send
+                         Send
                         </button>
                     </form>
                 </div>
@@ -80,6 +98,33 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
                 <button type="button" class="btn btn-primary" id="create-channel-submit">Create</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Members Modal -->
+<div class="modal fade" id="addMembersModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Members to Channel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="add-members-form">
+                    <div class="mb-3">
+                        <label class="form-label">Select Members to Add</label>
+                        <select class="form-select" id="new-members-select" multiple size="5" required>
+                            <option value="">Loading users...</option>
+                        </select>
+                        <small class="text-muted">Hold Ctrl/Cmd to select multiple users. Only users from your terminal are shown.</small>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-success" id="add-members-submit">Add Members</button>
             </div>
         </div>
     </div>
@@ -132,16 +177,11 @@
     margin-top: 0.25rem;
 }
 
-
 .channel-item {
-    padding: 0;
+    padding: 1rem;
     border-bottom: 1px solid #eee;
     cursor: pointer;
     transition: background 0.2s;
-}
-
-.channel-item > div {
-    padding: 1rem;
 }
 
 .channel-item:hover {
@@ -164,15 +204,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.delete-channel-btn {
-    opacity: 0;
-    transition: opacity 0.2s;
-}
-
-.channel-item:hover .delete-channel-btn {
-    opacity: 1;
 }
 
 .channel-content {
@@ -256,26 +287,14 @@
                 const lastMessageText = lastMessage ? lastMessage.text : 'No messages yet';
                 
                 channelDiv.innerHTML = `
-                    <div class="d-flex justify-content-between align-items-start">
-                        <div class="channel-content">
-                            <div class="channel-name">${channel.data.name || 'Unnamed Channel'}</div>
-                            <div class="channel-last-message">${lastMessageText}</div>
-                        </div>
-                        <button class="btn btn-sm btn-danger delete-channel-btn" data-channel-id="${channel.id}" 
-                                style="padding: 0.25rem 0.5rem;">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
+                    <div class="channel-content">
+                        <div class="channel-name">${channel.data.name || 'Unnamed Channel'}</div>
+                        <div class="channel-last-message">${lastMessageText}</div>
                     </div>
                 `;
                 
-                // Add click event for channel content only
+                // Add click event for channel content
                 channelDiv.querySelector('.channel-content').onclick = () => loadChannel(channel);
-                
-                // Add click event for delete button
-                channelDiv.querySelector('.delete-channel-btn').onclick = (e) => {
-                    e.stopPropagation();
-                    deleteChannel(channel.id);
-                };
                 
                 channelsList.appendChild(channelDiv);
             });
@@ -305,6 +324,12 @@
             const memberCount = Object.keys(channel.state.members).length;
             document.getElementById('channel-members').textContent = `${memberCount} members`;
             
+            // Show channel actions (members dropdown and leave button)
+            document.getElementById('channel-actions').style.display = 'flex';
+            
+            // Populate members list
+            populateMembersList(channel);
+            
             // Enable input
             document.getElementById('message-input').disabled = false;
             document.getElementById('send-btn').disabled = false;
@@ -322,6 +347,38 @@
         } catch (error) {
             console.error('Error loading channel:', error);
         }
+    }
+
+    // Populate members list dropdown
+    function populateMembersList(channel) {
+        const membersList = document.getElementById('members-list');
+        membersList.innerHTML = '';
+        
+        const members = Object.values(channel.state.members);
+        const createdBy = channel.data.created_by;
+        
+        if (members.length === 0) {
+            membersList.innerHTML = '<li><span class="dropdown-item-text text-muted">No members</span></li>';
+            return;
+        }
+        
+        members.forEach(member => {
+            const isCreator = createdBy && member.user_id === createdBy.id;
+            const isCurrentUser = member.user_id === userId;
+            
+            const li = document.createElement('li');
+            li.innerHTML = `
+                <span class="dropdown-item d-flex align-items-center justify-content-between">
+                    <span>
+                        <i class="fa-solid fa-user me-2"></i>
+                        ${member.user?.name || 'Unknown User'}
+                        ${isCurrentUser ? '<span class="badge bg-secondary ms-1">You</span>' : ''}
+                    </span>
+                    ${isCreator ? '<span class="badge bg-primary">Creator</span>' : ''}
+                </span>
+            `;
+            membersList.appendChild(li);
+        });
     }
 
     // Display messages
@@ -369,23 +426,37 @@
     });
 
     // Load users for channel creation
-    async function loadUsers() {
-        try {
-            const response = await fetch('/chat/users');
-            const users = await response.json();
-            
-            const select = document.getElementById('members-select');
-            select.innerHTML = '';
-            
-            users.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-                option.textContent = `${user.name} (${user.role})`;
-                select.appendChild(option);
-            });
-        } catch (error) {
-            console.error('Error loading users:', error);
-        }
+async function loadUsers() {
+    try {
+        const response = await fetch('/chat/users');
+        const users = await response.json();
+        
+        const select = document.getElementById('members-select');
+        select.innerHTML = '';
+        
+        users.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id;
+            // Format the role properly
+            const formattedRole = formatRole(user.role);
+            option.textContent = `${user.name} (${formattedRole})`;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading users:', error);
+    }
+}
+
+    // Helper function to format roles
+    function formatRole(role) {
+        const roleMap = {
+            'northBusManager': 'North Bus Manager',
+            'southBusManager': 'South Bus Manager',
+            'operator': 'Operator',
+            'driver': 'Driver',
+            'admin': 'Administrator'
+        };
+        return roleMap[role] || role.charAt(0).toUpperCase() + role.slice(1);
     }
 
     // Create channel modal
@@ -478,83 +549,177 @@
         container.scrollTop = container.scrollHeight;
     }
 
-    
-    // Updates channels list to include delete buttons
-    channels.forEach(channel => {
-        const channelDiv = document.createElement('div');
-        channelDiv.className = 'channel-item';
-        channelDiv.dataset.channelId = channel.id;
-        
-        const lastMessage = channel.state.messages[channel.state.messages.length - 1];
-        const lastMessageText = lastMessage ? lastMessage.text : 'No messages yet';
-        
-        channelDiv.innerHTML = `
-            <div class="d-flex justify-content-between align-items-start">
-                <div class="flex-grow-1 channel-content">
-                    <div class="channel-name">${channel.data.name || 'Unnamed Channel'}</div>
-                    <div class="channel-last-message">${lastMessageText}</div>
-                </div>
-                <button class="btn btn-sm btn-danger delete-channel-btn" data-channel-id="${channel.id}" 
-                        style="padding: 0.25rem 0.5rem;">
-                    <i class="bi bi-trash"></i>
-                </button>
+    // Leave channel function
+    async function leaveChannel() {
+        if (!currentChannel) {
+            alert('No channel selected');
+            return;
+        }
+
+        try {
+            // Check if current user is the creator
+            const createdBy = currentChannel.data.created_by;
+            const isCreator = createdBy && createdBy.id === userId;
+
+            let confirmMessage;
+            if (isCreator) {
+                confirmMessage = 'You are the creator of this channel. If you leave, the channel will be permanently deleted for all members. Are you sure?';
+            } else {
+                confirmMessage = 'Are you sure you want to leave this channel?';
+            }
+
+            if (!confirm(confirmMessage)) {
+                return;
+            }
+
+            if (isCreator) {
+                // Creator is leaving - delete the entire channel
+                await currentChannel.delete();
+                alert('Channel has been permanently deleted');
+            } else {
+                // Regular member leaving - just remove from channel
+                await currentChannel.removeMembers([userId]);
+                alert('You have left the channel');
+            }
+
+            // Clear the chat area
+            clearChatArea();
+
+            // Reload channels list
+            await loadChannels();
+
+        } catch (error) {
+            console.error('Error leaving channel:', error);
+            alert('Failed to leave channel: ' + error.message);
+        }
+    }
+
+    // Clear chat area helper function
+    function clearChatArea() {
+        currentChannel = null;
+        document.getElementById('channel-name').textContent = 'Select a channel to start chatting';
+        document.getElementById('channel-members').textContent = '';
+        document.getElementById('messages-container').innerHTML = `
+            <div class="text-center text-muted mt-5">
+                <i class="fa-solid fa-comment-slash" style="font-size: 3rem;"></i>
+                <p class="mt-3">No channel selected</p>
             </div>
         `;
+        document.getElementById('message-input').disabled = true;
+        document.getElementById('send-btn').disabled = true;
+        document.getElementById('channel-actions').style.display = 'none';
+    }
+
+    // Add members button
+    document.getElementById('add-members-btn').addEventListener('click', async () => {
+        if (!currentChannel) {
+            alert('No channel selected');
+            return;
+        }
         
-        // Add click event for channel content only
-        channelDiv.querySelector('.channel-content').onclick = () => loadChannel(channel);
+        // Load available users (excluding current members, filtered by terminal)
+        await loadAvailableUsers();
         
-        // Add click event for delete button
-        channelDiv.querySelector('.delete-channel-btn').onclick = (e) => {
-            e.stopPropagation();
-            deleteChannel(channel.id);
-        };
-        
-        channelsList.appendChild(channelDiv);
+        const modal = new bootstrap.Modal(document.getElementById('addMembersModal'));
+        modal.show();
     });
 
-
-    // Delete channel
-    async function deleteChannel(channelId) {
-        if (!confirm('Are you sure you want to delete this channel? This action cannot be undone.')) {
+    // Add members submit
+    document.getElementById('add-members-submit').addEventListener('click', async () => {
+        if (!currentChannel) {
+            alert('No channel selected');
+            return;
+        }
+        
+        const select = document.getElementById('new-members-select');
+        const selectedMembers = Array.from(select.selectedOptions).map(opt => opt.value);
+        
+        if (selectedMembers.length === 0) {
+            alert('Please select at least one member to add');
             return;
         }
         
         try {
-            const channel = channels.find(c => c.id === channelId);
-            
-            if (!channel) {
-                throw new Error('Channel not found');
+            // Register selected users in Stream via backend
+            const registerResponse = await fetch('/chat/register-users', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content || ''
+                },
+                body: JSON.stringify({
+                    user_ids: selectedMembers
+                })
+            });
+
+            if (!registerResponse.ok) {
+                throw new Error('Failed to register users');
             }
             
-            // Delete the channel
-            await channel.delete();
+            // Add members to the channel
+            await currentChannel.addMembers(selectedMembers);
             
-            // If this was the current channel, clear the chat area
-            if (currentChannel && currentChannel.id === channelId) {
-                currentChannel = null;
-                document.getElementById('channel-name').textContent = 'Select a channel to start chatting';
-                document.getElementById('channel-members').textContent = '';
-                document.getElementById('messages-container').innerHTML = `
-                    <div class="text-center text-muted mt-5">
-                        <i class="bi bi-chat-left-text fs-1"></i>
-                        <p class="mt-3">Select a channel to view messages</p>
-                    </div>
-                `;
-                document.getElementById('message-input').disabled = true;
-                document.getElementById('send-btn').disabled = true;
-            }
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('addMembersModal'));
+            modal.hide();
             
-            // Reload channels list
-            await loadChannels();
+            // Clear form
+            document.getElementById('new-members-select').selectedIndex = -1;
             
-            alert('Channel deleted successfully');
+            // Refresh channel to get updated member list
+            await currentChannel.watch();
+            
+            // Update members display
+            const memberCount = Object.keys(currentChannel.state.members).length;
+            document.getElementById('channel-members').textContent = `${memberCount} members`;
+            populateMembersList(currentChannel);
+            
+            alert(`Successfully added ${selectedMembers.length} member(s) to the channel`);
             
         } catch (error) {
-            console.error('Error deleting channel:', error);
-            alert('Failed to delete channel: ' + error.message);
+            console.error('Error adding members:', error);
+            alert('Failed to add members: ' + error.message);
+        }
+    });
+
+    // Load available users (excluding current channel members, filtered by same terminal)
+    async function loadAvailableUsers() {
+        try {
+            const response = await fetch('/chat/users');
+            const users = await response.json();
+            
+            const select = document.getElementById('new-members-select');
+            select.innerHTML = '';
+            
+            // Get current channel member IDs
+            const currentMemberIds = currentChannel ? 
+                Object.keys(currentChannel.state.members) : [];
+            
+            // Filter out users who are already members
+            // The backend already filters by terminal in ChatController@getUsers
+            const availableUsers = users.filter(user => 
+                !currentMemberIds.includes(user.id.toString())
+            );
+            
+            if (availableUsers.length === 0) {
+                select.innerHTML = '<option value="" disabled>All users from your terminal are already members</option>';
+                return;
+            }
+            
+            availableUsers.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                const formattedRole = formatRole(user.role);
+                option.textContent = `${user.name} (${formattedRole})`;
+                select.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading available users:', error);
         }
     }
+
+    // Leave channel button event listener
+    document.getElementById('leave-channel-btn').addEventListener('click', leaveChannel);
 
     // Initialize on page load
     initChat();

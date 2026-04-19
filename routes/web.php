@@ -86,19 +86,6 @@ Route::middleware('auth')->group(function () {
         Route::get('/search', [BusController::class, 'search'])->name('buses.search');
     });
 
-    // Terminal management routes
-    Route::prefix('terminal')->group(function () {
-        Route::get('/', [TerminalController::class, 'index'])->name('terminal.panel');
-        Route::get('/spaces', [TerminalController::class, 'getSpaces'])->name('terminal.spaces');
-        Route::post('/spaces/book', [TerminalController::class, 'bookSpace'])->name('terminal.book');
-        Route::put('/spaces/{id}/release', [TerminalController::class, 'releaseSpace'])->name('terminal.release');
-        Route::get('/availability', [TerminalController::class, 'checkAvailability'])->name('terminal.availability');
-        Route::get('/stats', [TerminalController::class, 'getStats'])->name('terminal.stats');
-        Route::post('/assign-space', [TerminalController::class, 'assignSpace'])->name('terminal.assign-space');
-        Route::get('/get-assignments', [TerminalController::class, 'getAssignments'])->name('terminal.get-assignments');
-        Route::post('/remove-assignment', [TerminalController::class, 'removeAssignment'])->name('terminal.remove-assignment');
-    });
-
     // Chat panel routes
     Route::prefix('chat')->group(function () {
         Route::get('/', [App\Http\Controllers\ChatController::class, 'index'])->name('chat.panel');

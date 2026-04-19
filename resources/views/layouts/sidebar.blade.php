@@ -28,10 +28,6 @@
             <i class="fas fa-bus-alt"></i>
             <span>Buses</span>
         </a>
-        <a href="{{ route('terminal.panel') }}" class="nav-item {{ request()->routeIs('terminal.*') ? 'active' : '' }}">
-            <i class="fas fa-building"></i>
-            <span>Terminal</span>
-        </a>
         <a href="{{ route('chat.panel') }}" class="nav-item {{ request()->routeIs('chat.*') ? 'active' : '' }}">
             <i class="fas fa-comments"></i>
             <span>Chat</span>

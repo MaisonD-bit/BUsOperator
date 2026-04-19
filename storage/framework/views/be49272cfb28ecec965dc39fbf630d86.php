@@ -1,14 +1,12 @@
-@extends('layouts.apptwo')
+<?php $__env->startSection('title', 'Chat'); ?>
 
-@section('title', 'Chat')
-
-@section('content')
+<?php $__env->startSection('content'); ?>
 <div class="container-fluid p-4">
-    @if(!empty($streamUnavailable))
+    <?php if(!empty($streamUnavailable)): ?>
     <div class="alert alert-warning mb-4" role="alert">
         Chat service is temporarily unavailable. Please try again in a few minutes.
     </div>
-    @endif
+    <?php endif; ?>
 
     <div class="row">
         <!-- Channels Sidebar -->
@@ -221,11 +219,11 @@
     const {
         StreamChat
     } = window;
-    const apiKey = '{{ $streamApiKey }}';
-    const userId = '{{ $userId }}';
-    const userToken = '{{ $streamToken }}';
-    const userName = '{{ $userName }}';
-    const streamUnavailable = @json($streamUnavailable ?? false);
+    const apiKey = '<?php echo e($streamApiKey); ?>';
+    const userId = '<?php echo e($userId); ?>';
+    const userToken = '<?php echo e($streamToken); ?>';
+    const userName = '<?php echo e($userName); ?>';
+    const streamUnavailable = <?php echo json_encode($streamUnavailable ?? false, 15, 512) ?>;
 
     let chatClient;
     let currentChannel;
@@ -755,4 +753,5 @@
         initChat();
     }
 </script>
-@endsection
+<?php $__env->stopSection(); ?>
+<?php echo $__env->make('layouts.apptwo', array_diff_key(get_defined_vars(), ['__data' => 1, '__path' => 1]))->render(); ?><?php /**PATH C:\Users\kylecb\Desktop\Capstone\Testing\BUsOperator\resources\views/panels/chat.blade.php ENDPATH**/ ?>

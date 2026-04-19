@@ -77,9 +77,9 @@ class User extends Authenticatable
     public function getStreamUserData(): array
     {
         // Map your app roles to Stream Chat roles
-        $streamRole = match($this->role) {
+        $streamRole = match ($this->role) {
             'admin', 'northBusManager', 'southBusManager' => 'admin',
-            'operator' => 'operator',
+            'bus_operator' => 'user',
             'driver' => 'driver',
             default => 'user',
         };

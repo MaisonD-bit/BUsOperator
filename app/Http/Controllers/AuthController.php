@@ -6,7 +6,9 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use App\Models\User;
+use App\Models\Commuter;
 
 class AuthController extends Controller
 {
@@ -109,5 +111,140 @@ class AuthController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
         return redirect()->route('login')->with('success', 'Logged out successfully');
+    }
+
+    /**
+     * API Login - Authenticate commuter and return token
+     */
+    public function apiLogin(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+            'password' => 'required|string',
+        ]);
+
+        // Normalize input and authenticate only against commuters table
+        $email = strtolower(trim((string) $request->email));
+        $password = (string) $request->password;
+
+        $commuter = Commuter::whereRaw('LOWER(email) = ?', [$email])->first();
+
+        if (!$commuter) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        $passwordMatches = Hash::check($password, (string) $commuter->password);
+
+        // Backward compatibility: if legacy plain password exists, accept once and re-hash it.
+        if (!$passwordMatches && hash_equals((string) $commuter->password, $password)) {
+            $commuter->password = Hash::make($password);
+            $commuter->save();
+            $passwordMatches = true;
+        }
+
+        if (!$passwordMatches) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid credentials',
+            ], 401);
+        }
+
+        // Generate app token (non-Sanctum)
+        $token = Str::random(80);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Login successful',
+            'token' => $token,
+            'user' => [
+                'id' => $commuter->id,
+                'name' => $commuter->name,
+                'email' => $commuter->email,
+                'created_at' => $commuter->created_at,
+            ],
+        ], 200);
+    }
+
+    /**
+     * API Register - Create new commuter account
+     */
+    public function apiRegister(Request $request)
+    {
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:commuters,email',
+            'password' => 'required|string|min:6|confirmed',
+        ]);
+
+        try {
+            $name = trim((string) $request->name);
+            $email = strtolower(trim((string) $request->email));
+
+            $commuter = Commuter::create([
+                'name' => $name,
+                'email' => $email,
+                'password' => Hash::make($request->password),
+            ]);
+
+            // Generate app token (non-Sanctum)
+            $token = Str::random(80);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Registration successful',
+                'token' => $token,
+                'user' => [
+                    'id' => $commuter->id,
+                    'name' => $commuter->name,
+                    'email' => $commuter->email,
+                    'created_at' => $commuter->created_at,
+                ],
+            ], 201);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed: ' . $e->getMessage(),
+            ], 400);
+        }
+    }
+
+    /**
+     * API Logout - Revoke user's tokens
+     */
+    public function apiLogout(Request $request)
+    {
+        return response()->json([
+            'success' => true,
+            'message' => 'Logged out successfully',
+        ], 200);
+    }
+
+    /**
+     * Get Authenticated User - Return current authenticated commuter
+     */
+    public function getAuthenticatedUser(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Not authenticated',
+            ], 401);
+        }
+
+        return response()->json([
+            'success' => true,
+            'user' => [
+                'id' => $user->id,
+                'name' => $user->name,
+                'email' => $user->email,
+                'created_at' => $user->created_at,
+            ],
+        ], 200);
     }
 }

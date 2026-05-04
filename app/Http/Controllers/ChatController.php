@@ -8,6 +8,9 @@ use GetStream\StreamChat\Client as StreamChat;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use GuzzleHttp\Client as GuzzleClient;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Handler\CurlHandler;
 
 class ChatController extends Controller
 {
@@ -21,7 +24,65 @@ class ChatController extends Controller
         $this->streamClient = null;
 
         if ($apiKey !== '' && $apiSecret !== '') {
-            $this->streamClient = new StreamChat($apiKey, $apiSecret);
+            try {
+                // Create Guzzle client with SSL verification disabled for development
+                if (config('app.debug')) {
+                    // For development, disable SSL verification
+                    $handler = new CurlHandler();
+                    $stack = HandlerStack::create($handler);
+                    $guzzleClient = new GuzzleClient([
+                        'handler' => $stack,
+                        'verify' => false,
+                        'http_errors' => false,
+                    ]);
+                    
+                    // Try to instantiate StreamChat with custom client
+                    // Note: This may vary by SDK version
+                    try {
+                        $this->streamClient = new StreamChat($apiKey, $apiSecret);
+                        // Attempt to set the client via reflection if possible
+                        $this->configureStreamClientSSL($this->streamClient, $guzzleClient);
+                    } catch (\Throwable $e) {
+                        Log::warning('Could not configure custom Guzzle client', ['error' => $e->getMessage()]);
+                        // Fall back to default client
+                        $this->streamClient = new StreamChat($apiKey, $apiSecret);
+                    }
+                } else {
+                    $this->streamClient = new StreamChat($apiKey, $apiSecret);
+                }
+            } catch (\Throwable $e) {
+                Log::error('Failed to initialize Stream Chat client', [
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                $this->streamClient = null;
+            }
+        }
+    }
+
+    /**
+     * Attempt to configure SSL verification in StreamChat client
+     */
+    private function configureStreamClientSSL($streamClient, $guzzleClient)
+    {
+        try {
+            $reflection = new \ReflectionObject($streamClient);
+            $properties = $reflection->getProperties();
+            
+            foreach ($properties as $property) {
+                $property->setAccessible(true);
+                $value = $property->getValue($streamClient);
+                
+                // Look for HTTP client property
+                if ($value instanceof \GuzzleHttp\ClientInterface || 
+                    (is_object($value) && strpos(get_class($value), 'Client') !== false)) {
+                    $property->setValue($streamClient, $guzzleClient);
+                    Log::debug('Successfully configured custom Guzzle client in StreamChat');
+                    return;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::debug('Could not configure SSL via reflection', ['error' => $e->getMessage()]);
         }
     }
 
@@ -40,13 +101,20 @@ class ChatController extends Controller
             try {
                 $this->streamClient->upsertUser($user->getStreamUserData());
                 $streamToken = $user->getStreamToken();
+                Log::info('Stream Chat initialized successfully for user: ' . $user->id);
             } catch (\Throwable $e) {
-                Log::warning('Stream chat unavailable in ChatController@index', [
+                Log::error('Stream chat error in ChatController@index', [
                     'user_id' => $user->id,
                     'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
                 ]);
-
-                $streamUnavailable = true;
+                // Still attempt to generate token even if upsert fails
+                try {
+                    $streamToken = $user->getStreamToken();
+                } catch (\Throwable $tokenError) {
+                    Log::error('Failed to generate Stream token', ['error' => $tokenError->getMessage()]);
+                    $streamUnavailable = true;
+                }
             }
         }
 
@@ -77,17 +145,44 @@ class ChatController extends Controller
 
         try {
             $currentUserId = (string)Auth::id();
-            $memberIds = collect($request->members)
+            
+            // Build member IDs list - include all selected members plus creator
+            $selectedMemberIds = collect($request->members)
                 ->map(fn($memberId) => (string) $memberId)
-                ->push($currentUserId)
-                ->unique()
                 ->values();
+            
+            // Only add current user if not already in the selection
+            $memberIds = $selectedMemberIds->contains($currentUserId)
+                ? $selectedMemberIds
+                : $selectedMemberIds->push($currentUserId);
+            
+            $memberIds = $memberIds->unique()->values();
 
-            $managerUsers = User::whereIn('id', $memberIds)->get();
-            $operatorUsers = DB::table('users')
-                ->whereIn('id', $memberIds)
-                ->where('role', 'bus_operator')
-                ->get();
+            Log::info('Creating channel', [
+                'channel_id' => $request->id,
+                'channel_name' => $request->name,
+                'selected_members' => $selectedMemberIds->all(),
+                'final_members' => $memberIds->all(),
+                'creator_id' => $currentUserId,
+            ]);
+
+            // Get users from database with fallback
+            try {
+                $managerUsers = User::whereIn('id', $memberIds)->get();
+            } catch (\Throwable $e) {
+                Log::error('Error fetching manager users', ['error' => $e->getMessage()]);
+                $managerUsers = collect([]);
+            }
+
+            try {
+                $operatorUsers = DB::table('users')
+                    ->whereIn('id', $memberIds)
+                    ->where('role', 'bus_operator')
+                    ->get();
+            } catch (\Throwable $e) {
+                Log::error('Error fetching operator users', ['error' => $e->getMessage()]);
+                $operatorUsers = collect([]);
+            }
 
             $streamUsers = [];
 
@@ -105,95 +200,119 @@ class ChatController extends Controller
             }
 
             if (!empty($streamUsers)) {
-                $this->streamClient->upsertUsers($streamUsers);
+                try {
+                    $this->streamClient->upsertUsers($streamUsers);
+                } catch (\Throwable $e) {
+                    Log::error('Error upserting users to Stream', ['error' => $e->getMessage()]);
+                    // Continue anyway - users might already exist
+                }
             }
 
-            $channel = $this->streamClient->channel(
-                $request->type,
-                $request->id,
-                [
-                    'name' => $request->name,
-                    'created_by' => ['id' => $currentUserId],
-                    'members' => $memberIds->all(),
-                ]
-            );
+            try {
+                $channel = $this->streamClient->channel(
+                    $request->type,
+                    $request->id,
+                    [
+                        'name' => $request->name,
+                        'created_by' => ['id' => $currentUserId],
+                        'members' => $memberIds->all(),
+                    ]
+                );
 
-            // Create the channel with the current user as creator
-            $channel->create($currentUserId);
+                // Create the channel with the current user as creator
+                $channel->create($currentUserId);
 
-            return response()->json([
-                'success' => true,
-                'channel' => [
-                    'id' => $channel->id,
-                    'type' => $request->type,
-                ]
-            ]);
+                Log::info('Channel created successfully', [
+                    'channel_id' => $channel->id,
+                    'creator_id' => $currentUserId,
+                    'member_count' => count($memberIds->all()),
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'channel' => [
+                        'id' => $channel->id,
+                        'type' => $request->type,
+                    ]
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('Stream channel creation error', ['error' => $e->getMessage()]);
+                throw $e;
+            }
         } catch (\Throwable $e) {
+            Log::error('Create channel error', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
             return response()->json([
                 'success' => false,
-                'error' => $e->getMessage()
+                'error' => 'Failed to create channel: ' . $e->getMessage()
             ], 500);
         }
     }
 
     public function getUsers()
     {
-        $currentUser = Auth::user();
+        try {
+            $currentUser = Auth::user();
+            
+            if (!$currentUser) {
+                return response()->json(['error' => 'Not authenticated'], 401);
+            }
 
-        $managerQuery = User::where('id', '!=', Auth::id());
+            // Get bus operators
+            $busOperators = [];
+            $operatorRows = DB::table('users')
+                ->where('role', 'bus_operator')
+                ->select(['id', 'name', 'photo_url', 'role', 'company_name'])
+                ->get();
 
-        // Prefer same-terminal managers, but fall back to all managers when none are available.
-        if ($currentUser && $currentUser->terminal) {
-            $sameTerminalManagers = (clone $managerQuery)->where('terminal', $currentUser->terminal);
-            $managerQuery = $sameTerminalManagers->exists() ? $sameTerminalManagers : $managerQuery;
-        }
-
-        $managers = $managerQuery
-            ->select(['id', 'name', 'first_name', 'last_name', 'photo_url', 'role', 'terminal'])
-            ->get()
-            ->map(function ($user) {
-                $displayName = $user->name;
-
-                if (!$displayName) {
-                    $displayName = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
-                }
-
-                if ($displayName === '') {
-                    $displayName = 'User #' . $user->id;
-                }
-
-                return [
-                    'id' => $user->id,
-                    'name' => $displayName,
-                    'photo_url' => $user->photo_url,
-                    'role' => $user->role,
-                    'formatted_role' => $user->formatted_role,
-                    'terminal' => $user->terminal,
-                    'source' => 'manager',
-                ];
-            });
-
-        $busOperators = DB::table('users')
-            ->where('role', 'bus_operator')
-            ->where('status', 'active')
-            ->select(['id', 'name', 'first_name', 'last_name', 'photo_url', 'role', 'company_name'])
-            ->get()
-            ->map(function ($user) {
-                return [
-                    'id' => $user->id,
-                    'name' => $user->name,
+            foreach ($operatorRows as $user) {
+                $busOperators[] = [
+                    'id' => (int) $user->id,
+                    'name' => $user->name ?? 'Unknown',
                     'photo_url' => $user->photo_url,
                     'role' => $user->role,
                     'formatted_role' => 'Bus Operator',
-                    'terminal' => null,
-                    'company_name' => $user->company_name ?? null,
                     'source' => 'bus_operator',
                 ];
-            });
+            }
 
-        $users = $managers->merge($busOperators)->values();
+            // Get managers
+            $managers = [];
+            $managerRows = User::where('id', '!=', $currentUser->id)
+                ->select(['id', 'name', 'photo_url', 'role', 'terminal'])
+                ->get();
 
-        return response()->json($users);
+            foreach ($managerRows as $user) {
+                $managers[] = [
+                    'id' => (int) $user->id,
+                    'name' => $user->name,
+                    'photo_url' => $user->photo_url,
+                    'role' => $user->role,
+                    'formatted_role' => isset($user->formatted_role) ? $user->formatted_role : 'Manager',
+                    'source' => 'manager',
+                ];
+            }
+
+            $users = array_merge($managers, $busOperators);
+
+            Log::info('Users loaded successfully', [
+                'current_user_id' => $currentUser->id,
+                'manager_count' => count($managers),
+                'operator_count' => count($busOperators),
+                'total_count' => count($users),
+            ]);
+
+            return response()->json($users, 200);
+        } catch (\Throwable $e) {
+            Log::error('Error in ChatController::getUsers', [
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+            return response()->json(['error' => 'Failed to load users'], 500);
+        }
     }
 
     public function registerUsers(Request $request)
@@ -210,11 +329,22 @@ class ChatController extends Controller
         }
 
         try {
-            $managerUsers = User::whereIn('id', $request->user_ids)->get();
-            $operatorUsers = DB::table('users')
-                ->whereIn('id', $request->user_ids)
-                ->where('role', 'bus_operator')
-                ->get();
+            try {
+                $managerUsers = User::whereIn('id', $request->user_ids)->get();
+            } catch (\Throwable $e) {
+                Log::error('Error fetching manager users for registration', ['error' => $e->getMessage()]);
+                $managerUsers = collect([]);
+            }
+
+            try {
+                $operatorUsers = DB::table('users')
+                    ->whereIn('id', $request->user_ids)
+                    ->where('role', 'bus_operator')
+                    ->get();
+            } catch (\Throwable $e) {
+                Log::error('Error fetching operator users for registration', ['error' => $e->getMessage()]);
+                $operatorUsers = collect([]);
+            }
 
             $streamUsers = [];
 
@@ -232,13 +362,24 @@ class ChatController extends Controller
             }
 
             // Upsert users in Stream (server-side)
-            $this->streamClient->upsertUsers($streamUsers);
+            if (!empty($streamUsers)) {
+                try {
+                    $this->streamClient->upsertUsers($streamUsers);
+                } catch (\Throwable $e) {
+                    Log::error('Error upserting users in registerUsers', ['error' => $e->getMessage()]);
+                    throw $e;
+                }
+            }
 
             return response()->json([
                 'success' => true,
                 'message' => 'Users registered successfully!'
             ]);
         } catch (\Throwable $e) {
+            Log::error('Register users error', [
+                'error' => $e->getMessage(),
+                'code' => $e->getCode(),
+            ]);
             return response()->json([
                 'success' => false,
                 'error' => $e->getMessage()

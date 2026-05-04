@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Route as BusRoute;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
 
@@ -124,8 +125,16 @@ class RouteController extends Controller
                 ->findOrFail($id);
 
             // Get geometry and stops data
-            $geometry = json_decode($route->geometry, true);
-            $stopsArr = $route->stops_data ? json_decode($route->stops_data, true) : [];
+            $geometry = is_string($route->geometry) ? json_decode($route->geometry, true) : $route->geometry;
+            $stopsArr = [];
+            if ($route->stops_data) {
+                $stopsData = $route->stops_data;
+                if (is_string($stopsData)) {
+                    $stopsArr = json_decode($stopsData, true) ?: [];
+                } elseif (is_array($stopsData)) {
+                    $stopsArr = $stopsData;
+                }
+            }
 
             return response()->json([
                 'success' => true,
@@ -275,7 +284,7 @@ class RouteController extends Controller
     {
         try {
             $routes = BusRoute::where('status', 'active')
-                ->select('id', 'name', 'code', 'start_location', 'end_location', 'regular_price', 'aircon_price', 'distance_km')
+                ->select('id', 'name', 'code', 'start_location', 'end_location', 'regular_price', 'aircon_price', 'distance_km', 'geometry', 'start_coordinates', 'end_coordinates')
                 ->orderBy('name')
                 ->get();
 
@@ -301,7 +310,7 @@ class RouteController extends Controller
         try {
             $route = BusRoute::where('status', 'active')
                 ->with(['stops'])
-                ->select('id', 'name', 'code', 'start_location', 'end_location', 'description', 'regular_price', 'aircon_price', 'distance_km', 'estimated_duration')
+                ->select('id', 'name', 'code', 'start_location', 'end_location', 'description', 'regular_price', 'aircon_price', 'distance_km', 'estimated_duration', 'geometry', 'start_coordinates', 'end_coordinates')
                 ->findOrFail($id);
 
             return response()->json([
@@ -362,7 +371,8 @@ class RouteController extends Controller
      */
     public function getAvailableRoutes()
     {
-        $routes = BusRoute::where('status', 'active')
+        $routes = BusRoute::where('user_id', Auth::id())
+            ->where('status', 'active')
             ->select('id', 'name', 'code', 'start_location', 'end_location')
             ->orderBy('name')
             ->get();
@@ -379,11 +389,11 @@ class RouteController extends Controller
     public function getRouteStats()
     {
         $stats = [
-            'total_routes' => BusRoute::count(),
-            'active_routes' => BusRoute::where('status', 'active')->count(),
-            'inactive_routes' => BusRoute::where('status', 'inactive')->count(),
-            'total_distance' => BusRoute::sum('distance_km'),
-            'average_distance' => BusRoute::avg('distance_km'),
+            'total_routes' => BusRoute::where('user_id', Auth::id())->count(),
+            'active_routes' => BusRoute::where('user_id', Auth::id())->where('status', 'active')->count(),
+            'inactive_routes' => BusRoute::where('user_id', Auth::id())->where('status', 'inactive')->count(),
+            'total_distance' => BusRoute::where('user_id', Auth::id())->sum('distance_km'),
+            'average_distance' => BusRoute::where('user_id', Auth::id())->avg('distance_km'),
         ];
 
         return response()->json([
@@ -395,7 +405,8 @@ class RouteController extends Controller
     public function getRoutesByStartLocation($start_location)
     {
         try {
-            $routes = BusRoute::where('status', 'active')
+            $routes = BusRoute::where('user_id', Auth::id())
+                ->where('status', 'active')
                 ->where('start_location', $start_location)
                 ->select('id', 'name', 'code', 'start_location', 'end_location', 'regular_price', 'aircon_price', 'distance_km')
                 ->orderBy('end_location')
@@ -427,7 +438,8 @@ class RouteController extends Controller
         }
 
         // Use the aliased model if needed
-        $destinations = BusRoute::where('start_location', $origin)
+        $destinations = BusRoute::where('user_id', Auth::id())
+            ->where('start_location', $origin)
             ->pluck('end_location')
             ->unique()
             ->values();
@@ -448,8 +460,9 @@ class RouteController extends Controller
     public function getAllDestinations()
     {
         try {
-            // Fetch all unique end_location values (no auth needed)
-            $destinations = BusRoute::where('status', 'active')
+            // Fetch all unique end_location values for current operator
+            $destinations = BusRoute::where('user_id', Auth::id())
+                ->where('status', 'active')
                 ->pluck('end_location')
                 ->unique()
                 ->values();

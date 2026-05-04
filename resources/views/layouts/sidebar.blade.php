@@ -8,9 +8,10 @@
             <i class="fas fa-tachometer-alt"></i>
             <span>Operator Panel</span>
         </a>
-        <a href="{{ route('notifications.panel') }}" class="nav-item {{ request()->routeIs('notifications.panel') ? 'active' : '' }}">
+        <a href="{{ route('notifications.panel') }}" class="nav-item {{ request()->routeIs('notifications.panel') ? 'active' : '' }}" style="position: relative;">
             <i class="fas fa-bell"></i>
             <span>Notifications</span>
+            <span id="notificationBadge" class="badge bg-danger rounded-pill" style="position: absolute; top: 5px; right: 5px; display: none; font-size: 0.7rem; padding: 2px 6px;">0</span>
         </a>
         <a href="{{ route('schedule.panel') }}" class="nav-item {{ request()->routeIs('schedule.panel') ? 'active' : '' }}">
             <i class="fas fa-calendar-alt"></i>

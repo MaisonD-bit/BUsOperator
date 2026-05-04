@@ -17,6 +17,15 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// Double booking modal function
+function showDoubleBookingModal(message) {
+    const messageEl = document.getElementById('doubleBookingMessage');
+    if (messageEl) {
+        messageEl.textContent = message;
+    }
+    showModal('doubleBookingModal');
+}
+
 function toggleScheduleForm() {
     const formCard = document.getElementById('scheduleFormCard');
     const toggleBtn = document.getElementById('toggleScheduleFormBtn');
@@ -218,7 +227,11 @@ function submitScheduleForm(e) {
             showToast('Please check the form for errors', 'error');
         } else if (error.message) {
             console.log('Error message:', error.message);
-            showToast('Error creating schedule: ' + error.message, 'error');
+            if (error.message.includes('already has a schedule')) {
+                showDoubleBookingModal(error.message);
+            } else {
+                showToast('Error creating schedule: ' + error.message, 'error');
+            }
         } else {
             console.log('Unknown error:', error);
             showToast('Error creating schedule: Unknown error', 'error');
@@ -375,6 +388,8 @@ function saveScheduleChanges() {
         if (error.errors) {
             showValidationErrors(error.errors);
             showToast('Please check the form for errors', 'error');
+        } else if (error.message && error.message.includes('already has a schedule')) {
+            showDoubleBookingModal(error.message);
         } else {
             showToast('Error updating schedule: ' + (error.message || 'Unknown error'), 'error');
         }
@@ -523,6 +538,7 @@ window.hideModal = hideModal;
 window.formatDateToDMY = formatDateToDMY;
 window.toggleScheduleForm = toggleScheduleForm;
 window.hideScheduleForm = hideScheduleForm;
+window.showDoubleBookingModal = showDoubleBookingModal;
 
 // Event listeners
 document.addEventListener('DOMContentLoaded', function() {
@@ -964,7 +980,12 @@ async function saveAllSchedules() {
         
         //   Show the specific error message from backend
         const errorMessage = error.message || 'An unexpected error occurred while saving schedules.';
-        showToast(errorMessage, 'error');
+        
+        if (errorMessage.includes('already has a schedule')) {
+            showDoubleBookingModal(errorMessage);
+        } else {
+            showToast(errorMessage, 'error');
+        }
         
         // If there are validation errors in the catch block
         if (error.errors) {

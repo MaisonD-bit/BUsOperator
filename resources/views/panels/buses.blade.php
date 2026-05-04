@@ -218,76 +218,80 @@
 <!-- Add/Edit Bus Modal -->
 <div class="modal fade" id="busModal" tabindex="-1" aria-labelledby="busModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
+        <div class="modal-content border-0">
+            <div class="modal-header bg-primary text-white border-0">
                 <h5 class="modal-title" id="busModalLabel">
                     <i class="fas fa-bus me-2"></i><span id="modalTitleText">Add New Bus</span>
-                    <small class="text-muted ms-2">- {{ ucfirst(Auth::user()->terminal) }} Terminal</small>
                 </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body p-4">
                 <form id="busForm">
                     @csrf
                     <input type="hidden" id="bus_id" name="bus_id">
                     <input type="hidden" id="method_field" name="_method">
                     
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label for="bus_number" class="form-label">Bus Number <span class="text-danger">*</span></label>
-                            <input type="text" id="bus_number" name="bus_number" class="form-control" required placeholder="e.g., JT-N001">
-                            <div class="invalid-feedback" id="bus_number_error"></div>
+                        <!-- Left Column - Bus Details -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="bus_number" class="form-label">Bus Number <span class="text-danger">*</span></label>
+                                <input type="text" id="bus_number" name="bus_number" class="form-control" required placeholder="e.g., JT-N001">
+                                <div class="invalid-feedback" id="bus_number_error"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="plate_number" class="form-label">Plate Number <span class="text-danger">*</span></label>
+                                <input type="text" id="plate_number" name="plate_number" class="form-control" required placeholder="e.g., JLT-N001">
+                                <div class="invalid-feedback" id="plate_number_error"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="model" class="form-label">Model <span class="text-danger">*</span></label>
+                                <input type="text" id="model" name="model" class="form-control" required placeholder="e.g., Hyundai County">
+                                <div class="invalid-feedback" id="model_error"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="bus_company" class="form-label">Company</label>
+                                <input type="text" id="bus_company" name="bus_company" class="form-control" placeholder="e.g., JULILA TRANSIT">
+                                <div class="invalid-feedback" id="bus_company_error"></div>
+                            </div>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label for="plate_number" class="form-label">Plate Number <span class="text-danger">*</span></label>
-                            <input type="text" id="plate_number" name="plate_number" class="form-control" required placeholder="e.g., JLT-N001">
-                            <div class="invalid-feedback" id="plate_number_error"></div>
+
+                        <!-- Right Column - Bus Configuration -->
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label for="capacity" class="form-label">Capacity <span class="text-danger">*</span></label>
+                                <input type="number" id="capacity" name="capacity" class="form-control" required min="1" max="100" placeholder="45">
+                                <div class="invalid-feedback" id="capacity_error"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="accommodation_type" class="form-label">Type <span class="text-danger">*</span></label>
+                                <select id="accommodation_type" name="accommodation_type" class="form-select" required>
+                                    <option value="">-- Select Type --</option>
+                                    <option value="regular">Regular</option>
+                                    <option value="air-conditioned">Air-Conditioned</option>
+                                </select>
+                                <div class="invalid-feedback" id="accommodation_type_error"></div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="bus_status" class="form-label">Status <span class="text-danger">*</span></label>
+                                <select id="bus_status" name="status" class="form-select" required>
+                                    <option value="">-- Select Status --</option>
+                                    <option value="available">Available</option>
+                                    <option value="in_service">In Service</option>
+                                    <option value="maintenance">Maintenance</option>
+                                    <option value="out_of_service">Out of Service</option>
+                                </select>
+                                <div class="invalid-feedback" id="bus_status_error"></div>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-8 mb-3">
-                            <label for="model" class="form-label">Bus Model <span class="text-danger">*</span></label>
-                            <input type="text" id="model" name="model" class="form-control" required placeholder="e.g., Hyundai County">
-                            <div class="invalid-feedback" id="model_error"></div>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label for="capacity" class="form-label">Capacity <span class="text-danger">*</span></label>
-                            <input type="number" id="capacity" name="capacity" class="form-control" required min="1" max="100" placeholder="45">
-                            <div class="invalid-feedback" id="capacity_error"></div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <!-- <div class="col-md-6 mb-3">
-                            <label for="bus_company" class="form-label">Bus Company</label>
-                            <input type="text" id="bus_company" name="bus_company" class="form-control" placeholder="e.g., JULILA TRANSIT">
-                            <div class="invalid-feedback" id="bus_company_error"></div>
-                        </div> -->
-                        <div class="col-md-6 mb-3">
-                            <label for="accommodation_type" class="form-label">Accommodation Type <span class="text-danger">*</span></label>
-                            <select id="accommodation_type" name="accommodation_type" class="form-select" required>
-                                <option value="regular">Regular</option>
-                                <option value="air-conditioned">Air-Conditioned</option>
-                            </select>
-                            <small class="text-muted">This affects fare calculation and passenger comfort</small>
-                            <div class="invalid-feedback" id="accommodation_type_error"></div>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label for="bus_status" class="form-label">Status <span class="text-danger">*</span></label>
-                            <select id="bus_status" name="status" class="form-select" required>
-                                <option value="available">Available</option>
-                                <option value="in_service">In Service</option>
-                                <option value="maintenance">Maintenance</option>
-                                <option value="out_of_service">Out of Service</option>
-                            </select>
-                            <div class="invalid-feedback" id="status_error"></div>
-                        </div>
-                    </div>
-
+                    <!-- Description -->
                     <div class="mb-3">
                         <label for="description" class="form-label">Description</label>
                         <textarea id="description" name="description" class="form-control" rows="3" placeholder="Additional notes about the bus (e.g., specific routes it serves)"></textarea>
@@ -295,15 +299,15 @@
                     </div>
 
                     <!-- Terminal Display (Read-only) -->
-                    <div class="alert alert-light border">
+                    <div class="alert alert-light border" style="font-size: 0.9rem;">
                         <small class="text-muted">
                             <i class="fas fa-info-circle me-1"></i>
-                            This bus will be assigned to: <strong>{{ ucfirst(Auth::user()->terminal) }} Terminal</strong>
+                            <strong>Terminal:</strong> {{ ucfirst(Auth::user()->terminal) }} Terminal
                         </small>
                     </div>
                 </form>
             </div>
-            <div class="modal-footer">
+            <div class="modal-footer border-top-0 p-4">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-1"></i>Cancel
                 </button>

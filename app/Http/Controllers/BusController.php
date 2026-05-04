@@ -22,12 +22,13 @@ class BusController extends Controller
 
         $operatorTerminal = $user->terminal;
 
-        // Build query with terminal filtering
+        // Build query with user_id filtering (multi-tenant isolation)
         $query = Bus::with(['schedules' => function($query) {
              $query->where('date', '>=', now()->toDateString())
                    ->orderBy('date')
                    ->orderBy('start_time');
-         }])->where('terminal', $operatorTerminal);
+         }])->where('user_id', Auth::id())
+           ->where('terminal', $operatorTerminal);
 
         // Apply search filters
         if ($request->filled('search')) {
@@ -50,12 +51,12 @@ class BusController extends Controller
 
         $buses = $query->orderBy('created_at', 'desc')->paginate(15);
 
-        // Terminal-specific statistics
+        // User-specific statistics (multi-tenant safe)
         $stats = [
-            'total_buses' => Bus::where('terminal', $operatorTerminal)->count(),
-            'available_buses' => Bus::where('status', 'available')->where('terminal', $operatorTerminal)->count(),
-            'in_service_buses' => Bus::where('status', 'in_service')->where('terminal', $operatorTerminal)->count(),
-            'maintenance_buses' => Bus::where('status', 'maintenance')->where('terminal', $operatorTerminal)->count(),
+            'total_buses' => Bus::where('user_id', Auth::id())->where('terminal', $operatorTerminal)->count(),
+            'available_buses' => Bus::where('user_id', Auth::id())->where('status', 'available')->where('terminal', $operatorTerminal)->count(),
+            'in_service_buses' => Bus::where('user_id', Auth::id())->where('status', 'in_service')->where('terminal', $operatorTerminal)->count(),
+            'maintenance_buses' => Bus::where('user_id', Auth::id())->where('status', 'maintenance')->where('terminal', $operatorTerminal)->count(),
         ];
 
         return view('panels.buses', compact('buses', 'stats'));
@@ -124,6 +125,7 @@ class BusController extends Controller
         try {
             $user = Auth::user();
             $bus = Bus::with(['schedules.driver', 'schedules.route'])
+                     ->where('user_id', $user->id)
                      ->where('terminal', $user->terminal)
                      ->findOrFail($id);
 
@@ -159,7 +161,7 @@ class BusController extends Controller
             return response()->json(['success' => false, 'message' => 'Access denied. Terminal not assigned.'], 403);
         }
 
-        $bus = Bus::where('terminal', $user->terminal)->findOrFail($id);
+        $bus = Bus::where('user_id', $user->id)->where('terminal', $user->terminal)->findOrFail($id);
 
         $validator = Validator::make($request->all(), [
             'bus_number' => 'required|string|max:20|unique:buses,bus_number,' . $id,
@@ -207,7 +209,7 @@ class BusController extends Controller
             return response()->json(['success' => false, 'message' => 'Access denied. Terminal not assigned.'], 403);
         }
 
-        $bus = Bus::where('terminal', $user->terminal)->findOrFail($id);
+        $bus = Bus::where('user_id', $user->id)->where('terminal', $user->terminal)->findOrFail($id);
 
         try {
             $activeSchedules = $bus->schedules()
@@ -236,7 +238,8 @@ class BusController extends Controller
     public function apiIndex()
     {
         try {
-            $buses = Bus::whereIn('status', ['available', 'in_service'])
+            $buses = Bus::where('user_id', Auth::id())
+                ->whereIn('status', ['available', 'in_service'])
                 ->select('id', 'bus_number', 'plate_number', 'capacity', 'bus_type', 'status')
                 ->orderBy('bus_number')
                 ->get();
@@ -261,7 +264,8 @@ class BusController extends Controller
     public function apiShow($id)
     {
         try {
-            $bus = Bus::whereIn('status', ['available', 'in_service'])
+            $bus = Bus::where('user_id', Auth::id())
+                ->whereIn('status', ['available', 'in_service'])
                 ->select('id', 'bus_number', 'plate_number', 'capacity', 'bus_type', 'manufacturer', 'model', 'year', 'status')
                 ->findOrFail($id);
 
@@ -289,7 +293,8 @@ class BusController extends Controller
         $endTime = $request->get('end_time');
         $excludeScheduleId = $request->get('exclude_schedule_id');
 
-        $query = Bus::where('status', 'available')
+        $query = Bus::where('user_id', $user->id)
+            ->where('status', 'available')
             ->where('terminal', $user->terminal)
             ->whereDoesntHave('schedules', function ($scheduleQuery) use ($date, $startTime, $endTime, $excludeScheduleId) {
                 $scheduleQuery->where('date', $date)
@@ -324,7 +329,7 @@ class BusController extends Controller
         $status = $request->get('status', '');
         $busType = $request->get('bus_type', '');
 
-        $buses = Bus::query()
+        $buses = Bus::where('user_id', Auth::id())
             ->when($query, function ($q) use ($query) {
                 $q->where('bus_number', 'like', "%{$query}%")
                   ->orWhere('plate_number', 'like', "%{$query}%");
@@ -354,15 +359,15 @@ class BusController extends Controller
         $terminal = $user->terminal;
 
         $stats = [
-            'total_buses' => Bus::where('terminal', $terminal)->count(),
-            'available_buses' => Bus::where('status', 'available')->where('terminal', $terminal)->count(),
-            'in_service_buses' => Bus::where('status', 'in_service')->where('terminal', $terminal)->count(),
-            'maintenance_buses' => Bus::where('status', 'maintenance')->where('terminal', $terminal)->count(),
-            'out_of_service_buses' => Bus::where('status', 'out_of_service')->where('terminal', $terminal)->count(),
-            'regular_buses' => Bus::where('accommodation_type', 'regular')->where('terminal', $terminal)->count(),
-            'aircon_buses' => Bus::where('accommodation_type', 'air-conditioned')->where('terminal', $terminal)->count(),
-            'total_capacity' => Bus::where('terminal', $terminal)->sum('capacity'),
-            'average_capacity' => Bus::where('terminal', $terminal)->avg('capacity'),
+            'total_buses' => Bus::where('user_id', $user->id)->where('terminal', $terminal)->count(),
+            'available_buses' => Bus::where('user_id', $user->id)->where('status', 'available')->where('terminal', $terminal)->count(),
+            'in_service_buses' => Bus::where('user_id', $user->id)->where('status', 'in_service')->where('terminal', $terminal)->count(),
+            'maintenance_buses' => Bus::where('user_id', $user->id)->where('status', 'maintenance')->where('terminal', $terminal)->count(),
+            'out_of_service_buses' => Bus::where('user_id', $user->id)->where('status', 'out_of_service')->where('terminal', $terminal)->count(),
+            'regular_buses' => Bus::where('user_id', $user->id)->where('accommodation_type', 'regular')->where('terminal', $terminal)->count(),
+            'aircon_buses' => Bus::where('user_id', $user->id)->where('accommodation_type', 'air-conditioned')->where('terminal', $terminal)->count(),
+            'total_capacity' => Bus::where('user_id', $user->id)->where('terminal', $terminal)->sum('capacity'),
+            'average_capacity' => Bus::where('user_id', $user->id)->where('terminal', $terminal)->avg('capacity'),
         ];
 
         return response()->json([

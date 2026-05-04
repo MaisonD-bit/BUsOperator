@@ -325,7 +325,67 @@ function clearFilters() {
     if (searchInput) searchInput.value = '';
     if (statusFilter) statusFilter.value = '';
     
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+    if (clearSearchBtn) clearSearchBtn.style.display = 'none';
+    
+    // Reset visibility of all driver cards and table rows
+    filterDrivers('');
+    
     window.location.href = window.location.pathname;
+}
+
+function filterDrivers(searchTerm) {
+    searchTerm = searchTerm.toLowerCase().trim();
+    
+    // Filter grid view
+    const gridView = document.getElementById('gridView');
+    if (gridView) {
+        const driverCards = gridView.querySelectorAll('.col-xl-3.col-lg-4.col-md-6');
+        let visibleCount = 0;
+        
+        driverCards.forEach(card => {
+            const name = card.querySelector('h5')?.textContent.toLowerCase() || '';
+            const driverId = card.querySelector('.text-muted')?.textContent.toLowerCase() || '';
+            const email = card.querySelector('a[href^="mailto:"]')?.textContent.toLowerCase() || '';
+            const phone = card.querySelector('a[href^="tel:"]')?.textContent.toLowerCase() || '';
+            
+            const matches = !searchTerm || 
+                           name.includes(searchTerm) || 
+                           driverId.includes(searchTerm) || 
+                           email.includes(searchTerm) || 
+                           phone.includes(searchTerm);
+            
+            card.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+        
+        // Show "no results" message if needed
+        const emptyMessage = gridView.querySelector('.col-12:has(i.fa-users-slash)');
+        if (emptyMessage) {
+            emptyMessage.style.display = visibleCount === 0 && searchTerm ? '' : 'none';
+        }
+    }
+    
+    // Filter table view
+    const tableBody = document.getElementById('performanceTableBody');
+    if (tableBody) {
+        const rows = tableBody.querySelectorAll('tr');
+        let visibleCount = 0;
+        
+        rows.forEach(row => {
+            const name = row.querySelector('td:nth-child(2)')?.textContent.toLowerCase() || '';
+            const email = row.querySelector('td:nth-child(3)')?.textContent.toLowerCase() || '';
+            const phone = row.querySelector('td:nth-child(4)')?.textContent.toLowerCase() || '';
+            
+            const matches = !searchTerm || 
+                           name.includes(searchTerm) || 
+                           email.includes(searchTerm) || 
+                           phone.includes(searchTerm);
+            
+            row.style.display = matches ? '' : 'none';
+            if (matches) visibleCount++;
+        });
+    }
 }
 
 function clearValidationErrors() {
@@ -372,6 +432,7 @@ window.editDriver = editDriver;
 window.updateDriverStatus = updateDriverStatus;
 window.toggleView = toggleView;
 window.clearFilters = clearFilters;
+window.filterDrivers = filterDrivers;
 window.approveDriver = approveDriver;
 window.rejectDriver = rejectDriver;
 
@@ -453,6 +514,40 @@ document.addEventListener('DOMContentLoaded', function() {
         driverToDelete = null;
         hideModal('deleteDriverModal');
     });
+    
+    // Search functionality
+    const driverSearch = document.getElementById('driverSearch');
+    const clearSearchBtn = document.getElementById('clearSearchBtn');
+    
+    if (driverSearch) {
+        // Real-time search as user types
+        driverSearch.addEventListener('input', function() {
+            const searchTerm = this.value.trim();
+            filterDrivers(searchTerm);
+            
+            // Show/hide clear button
+            if (clearSearchBtn) {
+                clearSearchBtn.style.display = searchTerm ? 'block' : 'none';
+            }
+        });
+        
+        // Handle Enter key
+        driverSearch.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                filterDrivers(this.value.trim());
+            }
+        });
+    }
+    
+    // Clear search button
+    if (clearSearchBtn) {
+        clearSearchBtn.addEventListener('click', function() {
+            if (driverSearch) driverSearch.value = '';
+            this.style.display = 'none';
+            filterDrivers('');
+        });
+    }
     
     // Add First Driver buttons
     const addFirstDriverBtn = document.getElementById('addFirstDriverBtn');
@@ -620,6 +715,8 @@ document.addEventListener('DOMContentLoaded', function() {
             gridView.style.display = 'none';
             tableViewBtn.classList.add('active');
             gridViewBtn.classList.remove('active');
+            // Initialize charts when table view is shown
+            setTimeout(() => initializeCharts(), 200);
         });
 
         gridViewBtn.addEventListener('click', function() {
@@ -629,4 +726,128 @@ document.addEventListener('DOMContentLoaded', function() {
             tableViewBtn.classList.remove('active');
         });
     }
+
+    // Initialize charts on page load if needed
+    setTimeout(() => initializeCharts(), 500);
 });
+
+// Chart instances
+let ratingsChart = null;
+let punctualityChart = null;
+
+// Initialize performance charts
+function initializeCharts() {
+    const ratingCanvas = document.getElementById('ratingsChart');
+    const punctualityCanvas = document.getElementById('punctualityChart');
+    
+    if (!ratingCanvas || !punctualityCanvas) return;
+    
+    // Get driver data from the table
+    const drivers = [];
+    const rows = document.querySelectorAll('#performanceTableBody tr');
+    
+    rows.forEach(row => {
+        const name = row.querySelector('td:nth-child(1) strong')?.textContent || '';
+        const ratingCell = row.querySelector('td:nth-child(3)');
+        const punctualityCell = row.querySelector('td:nth-child(4)');
+        
+        if (name && name !== 'Unnamed') {
+            // Extract rating (count of filled stars)
+            const stars = ratingCell?.querySelectorAll('.fa-star.text-warning') || [];
+            const rating = stars.length;
+            
+            // Extract punctuality percentage
+            const punctualityText = punctualityCell?.textContent || '0%';
+            const punctuality = parseInt(punctualityText.match(/\d+/)?.[0] || 0);
+            
+            drivers.push({ name, rating, punctuality });
+        }
+    });
+    
+    // Destroy existing charts
+    if (ratingsChart) ratingsChart.destroy();
+    if (punctualityChart) punctualityChart.destroy();
+    
+    // Create Ratings Chart
+    const ratingsCtx = ratingCanvas.getContext('2d');
+    ratingsChart = new Chart(ratingsCtx, {
+        type: 'bar',
+        data: {
+            labels: drivers.map(d => d.name),
+            datasets: [{
+                label: 'Rating (out of 5)',
+                data: drivers.map(d => d.rating),
+                backgroundColor: drivers.map(d => {
+                    if (d.rating >= 4) return '#28a745';
+                    if (d.rating >= 3) return '#ffc107';
+                    return '#dc3545';
+                }),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 5,
+                    ticks: { stepSize: 1 }
+                }
+            }
+        }
+    });
+    
+    // Create Punctuality Chart
+    const punctualityCtx = punctualityCanvas.getContext('2d');
+    punctualityChart = new Chart(punctualityCtx, {
+        type: 'bar',
+        data: {
+            labels: drivers.map(d => d.name),
+            datasets: [{
+                label: 'Punctuality Rate (%)',
+                data: drivers.map(d => d.punctuality),
+                backgroundColor: '#28a745',
+                borderRadius: 4
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    max: 100,
+                    ticks: { stepSize: 20 }
+                }
+            }
+        }
+    });
+}
+
+// Apply date filter
+function applyDateFilter() {
+    const startDate = document.getElementById('startDate')?.value;
+    const endDate = document.getElementById('endDate')?.value;
+    
+    if (startDate && endDate) {
+        showToast('Date filter applied', 'info');
+        // You can add API call here to fetch filtered data
+        // For now, just reinitialize charts with current data
+        setTimeout(() => initializeCharts(), 300);
+    }
+}
+
+// Refresh performance data
+function refreshPerformanceData() {
+    showToast('Refreshing performance data...', 'info');
+    location.reload();
+}

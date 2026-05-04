@@ -17,6 +17,56 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// Apply date filter function
+function applyDateFilter() {
+    const fromDate = document.getElementById('from_date').value;
+    const toDate = document.getElementById('to_date').value;
+    const routeId = document.getElementById('route_id').value;
+    const busId = document.getElementById('bus_id').value;
+    
+    // Extract driver ID from URL more reliably
+    const pathParts = window.location.pathname.split('/').filter(part => part.length > 0);
+    const driverId = pathParts[pathParts.length - 1];
+    
+    if (!driverId || isNaN(driverId)) {
+        console.error('Could not extract driver ID from URL');
+        return;
+    }
+    
+    // Build query string
+    let queryParams = [];
+    if (fromDate) queryParams.push(`from_date=${encodeURIComponent(fromDate)}`);
+    if (toDate) queryParams.push(`to_date=${encodeURIComponent(toDate)}`);
+    if (routeId) queryParams.push(`route_id=${encodeURIComponent(routeId)}`);
+    if (busId) queryParams.push(`bus_id=${encodeURIComponent(busId)}`);
+    
+    const queryString = queryParams.length > 0 ? '?' + queryParams.join('&') : '';
+    
+    // Store scroll position and apply filter
+    const scrollPos = document.getElementById('schedules-filter').offsetTop - 100;
+    sessionStorage.setItem('scheduleScrollPos', scrollPos);
+    
+    window.location.href = `/panel/profile/${driverId}${queryString}`;
+}
+
+// Clear date filter function
+function clearDateFilter() {
+    // Extract driver ID from URL more reliably
+    const pathParts = window.location.pathname.split('/').filter(part => part.length > 0);
+    const driverId = pathParts[pathParts.length - 1];
+    
+    if (!driverId || isNaN(driverId)) {
+        console.error('Could not extract driver ID from URL');
+        return;
+    }
+    
+    // Store scroll position before clearing
+    const scrollPos = document.getElementById('schedules-filter').offsetTop - 100;
+    sessionStorage.setItem('scheduleScrollPos', scrollPos);
+    
+    window.location.href = `/panel/profile/${driverId}`;
+}
+
 // Edit driver function
 function editDriver(id) {
     const modal = new bootstrap.Modal(document.getElementById('editDriverModal'));
@@ -25,61 +75,99 @@ function editDriver(id) {
 
 // Delete driver function
 function deleteDriver(id) {
-    if (confirm('Are you sure you want to delete this driver? This action cannot be undone.')) {
-        fetch(`/drivers/${id}`, {
-            method: 'DELETE',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast(data.message || 'Driver deleted successfully', 'success');
-                setTimeout(() => {
-                    window.location.href = window.driversRoute || '/drivers';
-                }, 1000);
-            } else {
-                showToast('Error deleting driver: ' + (data.message || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showToast('Error deleting driver', 'error');
-        });
-    }
+    // Store the driver ID for use in confirmation
+    window.pendingDeleteId = id;
+    
+    // Show the confirmation modal
+    const modal = new bootstrap.Modal(document.getElementById('confirmDeleteModal'));
+    modal.show();
+}
+
+// Perform the actual delete
+function performDeleteDriver() {
+    const id = window.pendingDeleteId;
+    if (!id) return;
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('confirmDeleteModal'));
+    modal.hide();
+    
+    fetch(`/drivers/${id}`, {
+        method: 'DELETE',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message || 'Driver deleted successfully', 'success');
+            setTimeout(() => {
+                window.location.href = window.driversRoute || '/drivers';
+            }, 1000);
+        } else {
+            showToast('Error deleting driver: ' + (data.message || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error deleting driver', 'error');
+    });
 }
 
 // Toggle driver status function
 function toggleDriverStatus(id, currentStatus) {
     const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+    const action = newStatus === 'active' ? 'activate' : 'deactivate';
     
-    if (confirm(`Are you sure you want to ${newStatus === 'active' ? 'activate' : 'deactivate'} this driver?`)) {
-        fetch(`/drivers/${id}/status`, {
-            method: 'PUT',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            },
-            body: JSON.stringify({ status: newStatus })
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showToast(data.message || 'Driver status updated successfully', 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showToast('Error updating status: ' + (data.message || 'Unknown error'), 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showToast('Error updating driver status', 'error');
-        });
-    }
+    // Store values for use in confirmation
+    window.pendingToggleId = id;
+    window.pendingNewStatus = newStatus;
+    
+    // Update modal text
+    const titleText = action.charAt(0).toUpperCase() + action.slice(1) + ' Driver';
+    document.getElementById('toggleStatusTitle').textContent = titleText;
+    document.getElementById('toggleStatusAction').textContent = action;
+    document.getElementById('toggleStatusBtnText').textContent = action.charAt(0).toUpperCase() + action.slice(1);
+    
+    // Show the confirmation modal
+    const modal = new bootstrap.Modal(document.getElementById('confirmToggleStatusModal'));
+    modal.show();
+}
+
+// Perform the actual status toggle
+function performToggleStatus() {
+    const id = window.pendingToggleId;
+    const newStatus = window.pendingNewStatus;
+    
+    if (!id || !newStatus) return;
+    
+    const modal = bootstrap.Modal.getInstance(document.getElementById('confirmToggleStatusModal'));
+    modal.hide();
+    
+    fetch(`/drivers/${id}/status`, {
+        method: 'PUT',
+        headers: {
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast(data.message || 'Driver status updated successfully', 'success');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            showToast('Error updating status: ' + (data.message || 'Unknown error'), 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showToast('Error updating driver status', 'error');
+    });
 }
 
 // Save driver changes function
@@ -169,11 +257,24 @@ function showValidationErrors(errors) {
 // Make functions globally available
 window.editDriver = editDriver;
 window.deleteDriver = deleteDriver;
+window.performDeleteDriver = performDeleteDriver;
 window.toggleDriverStatus = toggleDriverStatus;
+window.performToggleStatus = performToggleStatus;
 window.saveDriverChanges = saveDriverChanges;
+window.applyDateFilter = applyDateFilter;
+window.clearDateFilter = clearDateFilter;
 
 // DOMContentLoaded event
 document.addEventListener('DOMContentLoaded', function() {
+    // Restore scroll position if filters were applied
+    const scrollPos = sessionStorage.getItem('scheduleScrollPos');
+    if (scrollPos) {
+        setTimeout(function() {
+            window.scrollTo(0, parseInt(scrollPos));
+            sessionStorage.removeItem('scheduleScrollPos');
+        }, 100);
+    }
+    
     // Photo upload functionality
     const photoContainer = document.querySelector('#edit-photo-preview').parentElement;
     const photoInput = document.getElementById('edit_photo');
@@ -196,6 +297,10 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Save button click handler
     document.getElementById('saveDriverBtn')?.addEventListener('click', saveDriverChanges);
+    
+    // Confirmation button handlers
+    document.getElementById('confirmDeleteBtn')?.addEventListener('click', performDeleteDriver);
+    document.getElementById('confirmToggleStatusBtn')?.addEventListener('click', performToggleStatus);
     
     // Set the drivers route for navigation
     window.driversRoute = document.querySelector('a[href*="drivers.panel"]')?.getAttribute('href') || '/drivers';

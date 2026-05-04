@@ -21,6 +21,19 @@
         </div>
     </div>
 
+    <!-- Search Bar -->
+    <div class="mb-4">
+        <div class="input-group">
+            <span class="input-group-text bg-white border-end-0">
+                <i class="fas fa-search text-muted"></i>
+            </span>
+            <input type="text" id="driverSearch" class="form-control border-start-0" placeholder="Search by name, email, phone, or driver ID..." autocomplete="off">
+            <button class="btn btn-outline-secondary" type="button" id="clearSearchBtn" style="display: none;">
+                <i class="fas fa-times"></i> Clear
+            </button>
+        </div>
+    </div>
+
     <!-- Stats Cards Row -->
     <div class="row mb-4">
         <div class="col-lg-3 col-md-6 mb-3">
@@ -145,8 +158,43 @@
                                     <span class="text-truncate">{{ $driver->email }}</span>
                                 </div>
                                 @endif
+                                
+                                <!-- Performance Metrics -->
+                                @if(isset($driver->performance))
+                                <div class="mt-2 pt-2 border-top">
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-muted">Completion:</small>
+                                        <small class="fw-semibold text-success">{{ $driver->performance['completion_rate'] ?? 0 }}%</small>
+                                    </div>
+                                    <div class="progress" style="height: 4px; margin-bottom: 8px;">
+                                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ $driver->performance['completion_rate'] ?? 0 }}%"></div>
+                                    </div>
+                                    <div class="d-flex justify-content-between align-items-center mb-1">
+                                        <small class="text-muted">Acceptance:</small>
+                                        <small class="fw-semibold text-info">{{ $driver->performance['acceptance_rate'] ?? 0 }}%</small>
+                                    </div>
+                                    <div class="progress" style="height: 4px; margin-bottom: 8px;">
+                                        <div class="progress-bar bg-info" role="progressbar" style="width: {{ $driver->performance['acceptance_rate'] ?? 0 }}%"></div>
+                                    </div>
+                                    <div class="d-flex justify-content-between text-center" style="font-size: 11px;">
+                                        <div>
+                                            <div class="fw-semibold">{{ $driver->performance['total_schedules'] ?? 0 }}</div>
+                                            <span class="text-muted">Total</span>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold text-success">{{ $driver->performance['completed_schedules'] ?? 0 }}</div>
+                                            <span class="text-muted">Completed</span>
+                                        </div>
+                                        <div>
+                                            <div class="fw-semibold text-warning">{{ $driver->performance['active_schedules'] ?? 0 }}</div>
+                                            <span class="text-muted">Active</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                @endif
+                                
                                 @if($driver->app_registered && $driver->last_app_login)
-                                <div class="text-center">
+                                <div class="text-center mt-2">
                                     <small class="text-muted">Last login: {{ \Carbon\Carbon::parse($driver->last_app_login)->diffForHumans() }}</small>
                                 </div>
                                 @endif
@@ -191,96 +239,147 @@
                 </div>
             </div>
 
-            <!-- Table View -->
+            <!-- Table View - Performance Monitoring Dashboard -->
             <div id="tableView" style="display: none;">
-                <div class="table-responsive">
-                    <table class="table table-hover align-middle">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Driver</th>
-                                <th>ID</th>
-                                <th>Contact</th>
-                                <th>Source</th>
-                                <th>Status</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse($drivers ?? [] as $driver)
-                            <tr class="driver-row" 
-                                data-driver-id="{{ $driver->id }}"
-                                data-status="{{ $driver->status }}"
-                                data-source="{{ $driver->app_registered ? 'app' : 'web' }}">
-                                <td>
-                                    <div class="d-flex align-items-center">
-                                        <img src="{{ $driver->photo_url ? asset('storage/'.$driver->photo_url) : 'https://randomuser.me/api/portraits/men/'.(($driver->id ?? 1) % 70).'.jpg' }}" 
-                                             alt="{{ $driver->name ?? 'Driver' }}" 
-                                             class="rounded-circle me-3" 
-                                             width="40" height="40" 
-                                             style="object-fit: cover;">
-                                        <div>
-                                            <h6 class="mb-0 fw-semibold">{{ $driver->name ?? 'Unnamed Driver' }}</h6>
-                                            <span class="text-muted small">{{ $driver->email ?? '' }}</span>
+                <!-- Performance Monitoring Header -->
+                <div class="mb-4">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                        <h5 class="mb-0"><i class="fas fa-chart-line me-2"></i>Driver Performance Monitoring (Last 30 Days)</h5>
+                        <div class="d-flex gap-2 flex-wrap">
+                            <input type="date" id="startDate" class="form-control form-control-sm" style="max-width: 150px;" />
+                            <span class="align-self-center">to</span>
+                            <input type="date" id="endDate" class="form-control form-control-sm" style="max-width: 150px;" />
+                            <button class="btn btn-sm btn-primary" onclick="applyDateFilter()">Apply</button>
+                            <button class="btn btn-sm btn-outline-primary" onclick="refreshPerformanceData()"><i class="fas fa-sync me-1"></i>Refresh</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="row mb-4">
+                    <!-- Driver Ratings Chart -->
+                    <div class="col-lg-6 mb-3">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-white py-3">
+                                <h6 class="mb-0">Driver Ratings</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="ratingsChart" style="max-height: 250px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Punctuality Rates Chart -->
+                    <div class="col-lg-6 mb-3">
+                        <div class="card shadow-sm h-100">
+                            <div class="card-header bg-white py-3">
+                                <h6 class="mb-0">Punctuality Rates</h6>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="punctualityChart" style="max-height: 250px;"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Performance Analytics Table -->
+                <div class="card shadow-sm">
+                    <div class="card-header bg-white py-3">
+                        <h6 class="mb-0">Performance Analytics</h6>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Driver Name</th>
+                                    <th>License</th>
+                                    <th>Rating</th>
+                                    <th>Punctuality</th>
+                                    <th>Trips</th>
+                                    <th>Status</th>
+                                    <th class="text-center">Details</th>
+                                </tr>
+                            </thead>
+                            <tbody id="performanceTableBody">
+                                @forelse($drivers ?? [] as $driver)
+                                <tr>
+                                    <td>
+                                        <div class="d-flex align-items-center">
+                                            <img src="{{ $driver->photo_url ? asset('storage/'.$driver->photo_url) : 'https://randomuser.me/api/portraits/men/'.(($driver->id ?? 1) % 70).'.jpg' }}" 
+                                                 alt="{{ $driver->name }}" 
+                                                 class="rounded-circle me-2"
+                                                 style="width: 32px; height: 32px; object-fit: cover;">
+                                            <strong>{{ $driver->name ?? 'Unnamed' }}</strong>
                                         </div>
-                                    </div>
-                                </td>
-                                <td>DRV-{{ str_pad($driver->id ?? 0, 3, '0', STR_PAD_LEFT) }}</td>
-                                <td>{{ $driver->contact_number ?? 'N/A' }}</td>
-                                <td>
-                                    @if($driver->app_registered ?? false)
-                                    <span class="badge bg-info">
-                                        <i class="fas fa-mobile-alt"></i> App
-                                    </span>
-                                    @else
-                                    <span class="badge bg-secondary">
-                                        <i class="fas fa-desktop"></i> Web
-                                    </span>
-                                    @endif
-                                </td>
-                                <td>
-                                    <span class="badge {{ $driver->status == 'active' ? 'bg-success' : ($driver->status == 'inactive' ? 'bg-danger' : ($driver->status == 'pending' ? 'bg-warning text-dark' : ($driver->status == 'rejected' ? 'bg-dark' : 'bg-secondary'))) }}">
-                                        {{ ucfirst($driver->status ?? 'Active') }}
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <div class="btn-group btn-group-sm">
-                                        <button class="btn btn-outline-primary" onclick="viewDriver({{ $driver->id ?? 0 }})" title="View Details">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        @if($driver->status == 'pending' && $driver->app_registered)
-                                        <button class="btn btn-outline-success" onclick="approveDriver({{ $driver->id ?? 0 }})" title="Approve">
-                                            <i class="fas fa-check"></i>
-                                        </button>
-                                        <button class="btn btn-outline-danger" onclick="rejectDriver({{ $driver->id ?? 0 }})" title="Reject">
-                                            <i class="fas fa-times"></i>
-                                        </button>
+                                    </td>
+                                    <td>
+                                        <span class="text-muted">{{ $driver->license_number ?? 'N/A' }}</span>
+                                    </td>
+                                    <td>
+                                        @if(isset($driver->performance))
+                                            @php
+                                                $rating = round(($driver->performance['completion_rate'] ?? 0) / 20);
+                                                $rating = min($rating, 5);
+                                            @endphp
+                                            <div class="d-flex align-items-center gap-1">
+                                                @for($i = 0; $i < 5; $i++)
+                                                    @if($i < $rating)
+                                                        <i class="fas fa-star text-warning"></i>
+                                                    @else
+                                                        <i class="far fa-star text-muted"></i>
+                                                    @endif
+                                                @endfor
+                                                <span class="ms-2 small fw-semibold">{{ $rating }}.0/5</span>
+                                            </div>
                                         @else
-                                        <button class="btn btn-outline-success" onclick="editDriver({{ $driver->id ?? 0 }})" title="Edit">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <button class="btn btn-outline-danger" onclick="deleteDriver({{ $driver->id ?? 0 }})" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                            <span class="text-muted">N/A</span>
                                         @endif
-                                    </div>
-                                </td>
-                            </tr>
-                            @empty
-                            <tr>
-                                <td colspan="6" class="text-center py-5">
-                                    <div class="py-4">
-                                        <i class="fas fa-user-slash fa-3x text-muted mb-3"></i>
-                                        <h4>No drivers found</h4>
-                                        <p class="text-muted">There are no drivers matching your criteria</p>
-                                        <button class="btn btn-primary mt-2" id="addFirstDriverBtnTable">
-                                            <i class="fas fa-plus me-2"></i> Add Your First Driver
+                                    </td>
+                                    <td>
+                                        @if(isset($driver->performance))
+                                            <div class="d-flex align-items-center gap-2">
+                                                <div class="progress" style="width: 100px; height: 20px;">
+                                                    <div class="progress-bar bg-success" role="progressbar" style="width: {{ $driver->performance['acceptance_rate'] ?? 0 }}%"></div>
+                                                </div>
+                                                <span class="small fw-semibold">{{ $driver->performance['acceptance_rate'] ?? 0 }}%</span>
+                                            </div>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if(isset($driver->performance))
+                                            <span class="badge bg-info">{{ $driver->performance['completed_schedules'] ?? 0 }}/{{ $driver->performance['total_schedules'] ?? 0 }}</span>
+                                        @else
+                                            <span class="text-muted">N/A</span>
+                                        @endif
+                                    </td>
+                                    <td>
+                                        @if(isset($driver->performance) && $driver->performance['completion_rate'] >= 80)
+                                            <span class="badge bg-success">Excellent</span>
+                                        @elseif(isset($driver->performance) && $driver->performance['completion_rate'] >= 60)
+                                            <span class="badge bg-warning text-dark">Good</span>
+                                        @else
+                                            <span class="badge bg-danger">Needs improvement</span>
+                                        @endif
+                                    </td>
+                                    <td class="text-center">
+                                        <button class="btn btn-sm btn-outline-info" onclick="viewDriver({{ $driver->id ?? 0 }})" title="View Details">
+                                            <i class="fas fa-eye"></i> View
                                         </button>
-                                    </div>
-                                </td>
-                            </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                                    </td>
+                                </tr>
+                                @empty
+                                <tr>
+                                    <td colspan="7" class="text-center py-5">
+                                        <i class="fas fa-chart-line fa-2x text-muted mb-3"></i>
+                                        <p class="text-muted">No performance data available</p>
+                                    </td>
+                                </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 

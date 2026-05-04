@@ -31,6 +31,25 @@ class DriverController extends Controller
         ->orderBy('created_at', 'desc')
         ->paginate(15);
 
+        // Add performance metrics to each driver
+        $drivers->getCollection()->transform(function($driver) {
+            $totalSchedules = $driver->schedules()->count();
+            $completedSchedules = $driver->schedules()->where('status', 'completed')->count();
+            $acceptedSchedules = $driver->schedules()->whereIn('status', ['completed', 'active', 'started'])->count();
+            
+            $driver->performance = [
+                'total_schedules' => $totalSchedules,
+                'completed_schedules' => $completedSchedules,
+                'accepted_schedules' => $acceptedSchedules,
+                'completion_rate' => $totalSchedules > 0 ? round(($completedSchedules / $totalSchedules) * 100, 1) : 0,
+                'acceptance_rate' => $totalSchedules > 0 ? round(($acceptedSchedules / $totalSchedules) * 100, 1) : 0,
+                'active_schedules' => $driver->schedules()->where('status', 'active')->count(),
+                'pending_schedules' => $driver->schedules()->where('status', 'scheduled')->count(),
+            ];
+            
+            return $driver;
+        });
+
         $stats = [
             'total' => Driver::where('user_id', $userId)->count(),
             'active' => Driver::where('user_id', $userId)->where('status', 'active')->count(),
@@ -356,7 +375,8 @@ class DriverController extends Controller
         $startTime = $request->get('start_time');
         $endTime = $request->get('end_time');
 
-        $availableDrivers = Driver::where('status', 'active')
+        $availableDrivers = Driver::where('user_id', Auth::id())
+            ->where('status', 'active')
             ->whereDoesntHave('schedules', function ($query) use ($date, $startTime, $endTime) {
                 $query->where('date', $date)
                       ->where(function ($timeQuery) use ($startTime, $endTime) {
@@ -380,7 +400,8 @@ class DriverController extends Controller
     public function lookupByEmail(Request $request): JsonResponse
     {
         $email = $request->input('email');
-        $driver = Driver::where('email', $email)->first();
+        $driver = Driver::where('user_id', Auth::id())
+            ->where('email', $email)->first();
         
         if (!$driver) {
             return response()->json(['success' => false], 404);
@@ -395,7 +416,8 @@ class DriverController extends Controller
     public function driversPanel()
     {
         try {
-            $drivers = Driver::with(['schedules' => function($query) {
+            $drivers = Driver::where('user_id', Auth::id())
+                ->with(['schedules' => function($query) {
                 $query->with(['route', 'bus'])->orderBy('date', 'desc');
             }])
             ->orderBy('created_at', 'desc')
@@ -443,15 +465,67 @@ class DriverController extends Controller
     /**
      * Driver profile view
      */
-public function profile($id)
+public function profile($id, Request $request)
 {
     try {
-        $driver = Driver::with(['schedules.route', 'schedules.bus'])
-                    ->findOrFail($id);
+        $driver = Driver::findOrFail($id);
+        
+        // Get filters
+        $fromDate = $request->input('from_date');
+        $toDate = $request->input('to_date');
+        $routeId = $request->input('route_id');
+        $busId = $request->input('bus_id');
+        
+        // Build schedules query
+        $schedulesQuery = $driver->schedules()
+                                ->with(['route', 'bus'])
+                                ->orderBy('date', 'desc')
+                                ->orderBy('start_time', 'desc');
+        
+        // Apply date filters
+        if ($fromDate) {
+            $schedulesQuery->where('date', '>=', $fromDate);
+        }
+        if ($toDate) {
+            $schedulesQuery->where('date', '<=', $toDate);
+        }
+        
+        // Apply route filter
+        if ($routeId) {
+            $schedulesQuery->where('route_id', $routeId);
+        }
+        
+        // Apply bus filter
+        if ($busId) {
+            $schedulesQuery->where('bus_id', $busId);
+        }
+        
+        // Get all schedules without filters for the dropdown options
+        $allSchedules = $driver->schedules()->with(['route', 'bus'])->get();
+        
+        // Get unique routes
+        $routes = [];
+        foreach ($allSchedules as $schedule) {
+            if ($schedule->route && $schedule->route->id && $schedule->route->name) {
+                $routes[$schedule->route->id] = $schedule->route->name;
+            }
+        }
+        
+        // Get unique buses
+        $buses = [];
+        foreach ($allSchedules as $schedule) {
+            if ($schedule->bus && $schedule->bus->id && $schedule->bus->bus_number) {
+                $buses[$schedule->bus->id] = $schedule->bus->bus_number;
+            }
+        }
+        
+        // Paginate schedules (10 per page)
+        $schedules = $schedulesQuery->paginate(10);
         
         // Use the existing profile.blade.php view
-        return view('panels.profile', compact('driver'));
+        return view('panels.profile', compact('driver', 'schedules', 'routes', 'buses'));
     } catch (\Exception $e) {
+        \Log::error('Driver profile error: ' . $e->getMessage());
         return redirect()->route('drivers.panel')->with('error', 'Driver not found.');
     }
 }
@@ -531,7 +605,7 @@ public function profile($id)
                 'emergency_relation' => $request->emergency_relation,
                 'emergency_contact' => $request->emergency_contact,
                 'photo_url' => $photoUrl,
-                'status' => 'inactive', 
+                'status' => 'pending', 
                 'user_id' => $request->user_id,
                 'app_registered' => true,
                 'registration_source' => 'mobile_app'

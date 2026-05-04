@@ -78,6 +78,24 @@ class ScheduleController extends Controller
                 'status' => 'required|in:scheduled,active,completed,cancelled',
             ]);
 
+            // Check for overlapping schedules
+            $overlappingSchedule = $this->checkForOverlappingSchedules(
+                $validated['driver_id'],
+                $validated['date'],
+                $validated['start_time'],
+                $validated['end_time']
+            );
+
+            if ($overlappingSchedule) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot create schedule: Driver already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}."
+                    ], 422);
+                }
+                return redirect()->back()->with('error', "Cannot create schedule: Driver already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}.")->withInput();
+            }
+
             // Get route details for fare calculation
             $route = Route::find($validated['route_id']);
             $bus = Bus::find($validated['bus_id']);
@@ -177,6 +195,25 @@ class ScheduleController extends Controller
                 'end_time' => 'required|date_format:H:i|after:start_time',
                 'status' => 'required|in:scheduled,active,completed,cancelled,accepted,declined',
             ]);
+
+            // Check for overlapping schedules (exclude current schedule)
+            $overlappingSchedule = $this->checkForOverlappingSchedules(
+                $validated['driver_id'],
+                $validated['date'],
+                $validated['start_time'],
+                $validated['end_time'],
+                $schedule->id
+            );
+
+            if ($overlappingSchedule) {
+                if ($request->expectsJson()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Cannot update schedule: Driver already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}."
+                    ], 422);
+                }
+                return redirect()->back()->with('error', "Cannot update schedule: Driver already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}.")->withInput();
+            }
 
             // Get route details for fare calculation
             $route = Route::find($validated['route_id']);
@@ -354,29 +391,23 @@ class ScheduleController extends Controller
      * @param string $date
      * @param string $startTime
      * @param string $endTime
+     * @param int|null $excludeId Schedule ID to exclude from check (for updates)
      * @return \App\Models\Schedule|null
      */
-    private function checkForOverlappingSchedules($driverId, $date, $startTime, $endTime)
+    private function checkForOverlappingSchedules($driverId, $date, $startTime, $endTime, $excludeId = null)
     {
-        // Convert times to 24-hour format for comparison if needed
-        // Assuming they are already in H:i format
-
-        return Schedule::where('driver_id', $driverId)
+        $query = Schedule::where('driver_id', $driverId)
             ->where('date', $date)
-            ->where(function ($query) use ($startTime, $endTime) {
-                // Overlap condition: New schedule overlaps with existing one
-                // Case 1: New start time is within an existing schedule
-                $query->whereBetween('start_time', [$startTime, $endTime])
-                    // Case 2: New end time is within an existing schedule
-                    ->orWhereBetween('end_time', [$startTime, $endTime])
-                    // Case 3: New schedule completely encompasses an existing one
-                    ->orWhere(function ($subQuery) use ($startTime, $endTime) {
-                        $subQuery->where('start_time', '<=', $startTime)
-                            ->where('end_time', '>=', $endTime);
-                    });
-            })
-            ->first(); // Return the first overlapping schedule found
+            ->where('start_time', '<', $endTime)
+            ->where('end_time', '>', $startTime);
+
+        if ($excludeId) {
+            $query->where('id', '!=', $excludeId);
+        }
+
+        return $query->first();
     }
+
 
 
     // ===================================
@@ -448,6 +479,7 @@ class ScheduleController extends Controller
                 ->orderBy('date', 'desc')
                 ->orderBy('start_time', 'asc')
                 ->get();
+
 
             Log::info("Total schedules found: " . $allSchedules->count());
 
@@ -657,7 +689,23 @@ class ScheduleController extends Controller
                 'notes' => 'nullable|string|max:500'
             ]);
 
+            // Check for overlapping schedules
+            $overlappingSchedule = $this->checkForOverlappingSchedules(
+                $request->driver_id,
+                $request->date,
+                $request->start_time,
+                $request->end_time
+            );
+
+            if ($overlappingSchedule) {
+                return response()->json([
+                    'success' => false,
+                    'message' => "Cannot assign schedule: Driver already has a schedule from {$overlappingSchedule->start_time} to {$overlappingSchedule->end_time} on {$overlappingSchedule->date}."
+                ], 422);
+            }
+
             $schedule = Schedule::create([
+
                 'driver_id' => $request->driver_id,
                 'route_id' => $request->route_id,
                 'bus_id' => $request->bus_id,

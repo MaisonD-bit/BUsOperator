@@ -24,91 +24,96 @@
 
     <!-- Driver Profile Card -->
     <div class="card border-0 bg-white shadow-sm mb-4">
-        <div class="card-body p-4">
-            <div class="row">
-                <div class="col-md-3 text-center">
+        <div class="card-body p-2">
+            <div class="row align-items-start g-3">
+                <!-- Photo & Status -->
+                <div class="col-md-2 d-flex flex-column align-items-center">
                     <img src="{{ $driver->photo_url ? asset('storage/'.$driver->photo_url) : 'https://randomuser.me/api/portraits/men/'.(($driver->id ?? 1) % 70).'.jpg' }}" 
                          alt="Driver Photo" 
                          class="rounded-circle border border-3 border-light shadow" 
-                         style="width: 180px; height: 180px; object-fit: cover;">
-                    <div class="mt-3">
+                         style="width: 200px; height: 200px; min-width: 200px; min-height: 200px; object-fit: cover; display: block; aspect-ratio: 1;">
+                    <div class="mt-2 d-flex justify-content-center" style="width: 100%;">
                         @if($driver->status == 'active')
-                            <span class="badge bg-success fs-6">
+                            <span class="badge bg-success fs-5">
                                 <i class="fas fa-circle me-1" style="font-size: 8px;"></i>Active
                             </span>
                         @elseif($driver->status == 'inactive')
-                            <span class="badge bg-danger fs-6">
+                            <span class="badge bg-danger fs-5">
                                 <i class="fas fa-circle me-1" style="font-size: 8px;"></i>Inactive
                             </span>
                         @else
-                            <span class="badge bg-warning fs-6">
+                            <span class="badge bg-warning fs-5">
                                 <i class="fas fa-circle me-1" style="font-size: 8px;"></i>On Leave
                             </span>
                         @endif
                     </div>
                 </div>
+
+                <!-- Name & ID -->
+                <div class="col-md-3 d-flex flex-column justify-content-center">
+                    <h2 class="fw-bold text-dark mb-1" style="font-size: 1.6rem;">{{ $driver->name ?? 'Unnamed Driver' }}</h2>
+                    <p class="text-muted mb-0" style="font-size: 1.1rem;">Driver ID: <strong>DRV-{{ str_pad($driver->id ?? 1, 3, '0', STR_PAD_LEFT) }}</strong></p>
+                </div>
                 
-                <div class="col-md-9">
-                    <h2 class="fw-bold text-dark mb-1">{{ $driver->name ?? 'Unnamed Driver' }}</h2>
-                    <p class="text-muted mb-3">Driver ID: DRV-{{ str_pad($driver->id ?? 1, 3, '0', STR_PAD_LEFT) }}</p>
-                    
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                    <i class="fas fa-birthday-cake text-primary"></i>
+                <!-- Driver Info -->
+                <div class="col-md-7">
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <div class="bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                                    <i class="fas fa-birthday-cake text-primary" style="font-size: 1rem;"></i>
                                 </div>
-                                <div>
-                                    <small class="text-muted d-block">Date of Birth</small>
-                                    <span class="fw-semibold">{{ $driver->date_of_birth ? $driver->date_of_birth->format('F j, Y') : 'Not provided' }}</span>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Date of Birth</small>
+                                    <span class="fw-semibold" style="font-size: 1.05rem; display: block; word-break: break-word;">{{ $driver->date_of_birth ? $driver->date_of_birth->format('F j, Y') : 'Not provided' }}</span>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                    <i class="fas fa-venus-mars text-primary"></i>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <div class="bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                                    <i class="fas fa-venus-mars text-primary" style="font-size: 1rem;"></i>
                                 </div>
-                                <div>
-                                    <small class="text-muted d-block">Gender</small>
-                                    <span class="fw-semibold">{{ ucfirst($driver->gender ?? 'Not specified') }}</span>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-6 mb-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                    <i class="fas fa-phone-alt text-primary"></i>
-                                </div>
-                                <div>
-                                    <small class="text-muted d-block">Contact Number</small>
-                                    <span class="fw-semibold">{{ $driver->contact_number ?? 'Not provided' }}</span>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Gender</small>
+                                    <span class="fw-semibold" style="font-size: 1.05rem; display: block;">{{ ucfirst($driver->gender ?? 'Not specified') }}</span>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="col-md-6 mb-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                    <i class="fas fa-envelope text-primary"></i>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <div class="bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                                    <i class="fas fa-phone-alt text-primary" style="font-size: 1rem;"></i>
                                 </div>
-                                <div>
-                                    <small class="text-muted d-block">Email Address</small>
-                                    <span class="fw-semibold">{{ $driver->email ?? 'Not provided' }}</span>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Contact Number</small>
+                                    <span class="fw-semibold" style="font-size: 1.05rem; display: block;">{{ $driver->contact_number ?? 'Not provided' }}</span>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="col-12 mb-3">
-                            <div class="d-flex align-items-center">
-                                <div class="bg-primary bg-opacity-10 rounded-circle me-3 d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
-                                    <i class="fas fa-map-marker-alt text-primary"></i>
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-start">
+                                <div class="bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                                    <i class="fas fa-envelope text-primary" style="font-size: 1rem;"></i>
                                 </div>
-                                <div>
-                                    <small class="text-muted d-block">Address</small>
-                                    <span class="fw-semibold">{{ $driver->address ?? 'Not provided' }}</span>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Email Address</small>
+                                    <span class="fw-semibold" style="font-size: 1.05rem; display: block; word-break: break-all;">{{ $driver->email ?? 'Not provided' }}</span>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <div class="d-flex align-items-start">
+                                <div class="bg-primary bg-opacity-10 rounded-circle me-2 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 40px; height: 40px;">
+                                    <i class="fas fa-map-marker-alt text-primary" style="font-size: 1rem;"></i>
+                                </div>
+                                <div style="min-width: 0;">
+                                    <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Address</small>
+                                    <span class="fw-semibold" style="font-size: 1.05rem; display: block; word-break: break-word;">{{ $driver->address ?? 'Not provided' }}</span>
                                 </div>
                             </div>
                         </div>
@@ -119,22 +124,22 @@
     </div>
 
     <!-- Information Cards -->
-    <div class="row mb-4">
+    <div class="row mb-4 g-3">
         <!-- License Information -->
-        <div class="col-md-6 mb-3">
+        <div class="col-md-6">
             <div class="card border-0 bg-white shadow-sm h-100">
-                <div class="card-header bg-light">
-                    <h5 class="card-title mb-0"><i class="fas fa-id-card text-primary me-2"></i>License Information</h5>
+                <div class="card-header bg-light py-2">
+                    <h5 class="card-title mb-0" style="font-size: 1rem;"><i class="fas fa-id-card text-primary me-2"></i>License Information</h5>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-12 mb-3">
-                            <small class="text-muted d-block">License Number</small>
-                            <span class="fw-semibold">{{ $driver->license_number ?? 'Not provided' }}</span>
+                <div class="card-body py-2">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">License Number</small>
+                            <span class="fw-semibold" style="font-size: 1.05rem;">{{ $driver->license_number ?? 'Not provided' }}</span>
                         </div>
                         <div class="col-12">
-                            <small class="text-muted d-block">Expiry Date</small>
-                            <span class="fw-semibold">{{ $driver->license_expiry ? $driver->license_expiry->format('F j, Y') : 'Not provided' }}</span>
+                            <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Expiry Date</small>
+                            <span class="fw-semibold" style="font-size: 1.05rem;">{{ $driver->license_expiry ? $driver->license_expiry->format('F j, Y') : 'Not provided' }}</span>
                         </div>
                     </div>
                 </div>
@@ -142,24 +147,24 @@
         </div>
         
         <!-- Emergency Contact -->
-        <div class="col-md-6 mb-3">
+        <div class="col-md-6">
             <div class="card border-0 bg-white shadow-sm h-100">
-                <div class="card-header bg-light">
-                    <h5 class="card-title mb-0"><i class="fas fa-exclamation-circle text-warning me-2"></i>Emergency Contact</h5>
+                <div class="card-header bg-light py-2">
+                    <h5 class="card-title mb-0" style="font-size: 1rem;"><i class="fas fa-exclamation-circle text-warning me-2"></i>Emergency Contact</h5>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-12 mb-3">
-                            <small class="text-muted d-block">Contact Person</small>
-                            <span class="fw-semibold">{{ $driver->emergency_name ?? 'Not provided' }}</span>
-                        </div>
-                        <div class="col-6 mb-3">
-                            <small class="text-muted d-block">Relationship</small>
-                            <span class="fw-semibold">{{ $driver->emergency_relation ?? 'Not provided' }}</span>
+                <div class="card-body py-2">
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Contact Person</small>
+                            <span class="fw-semibold" style="font-size: 1.05rem;">{{ $driver->emergency_name ?? 'Not provided' }}</span>
                         </div>
                         <div class="col-6">
-                            <small class="text-muted d-block">Contact Number</small>
-                            <span class="fw-semibold">{{ $driver->emergency_contact ?? 'Not provided' }}</span>
+                            <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Relationship</small>
+                            <span class="fw-semibold" style="font-size: 1.05rem;">{{ $driver->emergency_relation ?? 'Not provided' }}</span>
+                        </div>
+                        <div class="col-6">
+                            <small class="text-muted d-block" style="font-size: 0.9rem; font-weight: 500;">Contact Number</small>
+                            <span class="fw-semibold" style="font-size: 1.05rem;">{{ $driver->emergency_contact ?? 'Not provided' }}</span>
                         </div>
                     </div>
                 </div>
@@ -167,69 +172,149 @@
         </div>
     </div>
 
-    <!-- Assigned Routes -->
+    <!-- Assigned Routes & Schedules -->
     <div class="card border-0 bg-white shadow-sm">
-        <div class="card-header bg-light">
+        <div class="card-header border-bottom">
             <h5 class="card-title mb-0"><i class="fas fa-route text-success me-2"></i>Assigned Routes & Schedules</h5>
         </div>
         <div class="card-body">
-            @if(isset($driver->schedules) && $driver->schedules->count() > 0)
-                @foreach($driver->schedules as $schedule)
-                    @if($schedule->route && $schedule->bus)
-                        <div class="border-start border-primary border-4 bg-light p-3 mb-3 rounded-end">
-                            <div class="mb-2">
-                                <i class="fas fa-route text-primary me-2"></i>
-                                <strong>Route:</strong> {{ $schedule->route->name }}
-                                <span class="badge bg-primary ms-2">{{ $schedule->route->route_code ?? 'N/A' }}</span>
-                            </div>
-                            <div class="mb-2">
-                                <i class="fas fa-bus text-primary me-2"></i>
-                                <strong>Bus:</strong> {{ $schedule->bus->bus_number }} ({{ $schedule->bus->model }})
-                                @if($schedule->bus->accommodation_type)
-                                    <span class="badge bg-info ms-2">{{ ucfirst(str_replace('-', ' ', $schedule->bus->accommodation_type)) }}</span>
-                                @endif
-                            </div>
-                            <div class="mb-2">
-                                <i class="fas fa-clock text-primary me-2"></i>
-                                <strong>Schedule:</strong> 
-                                @if($schedule->days && is_array($schedule->days))
-                                    {{ implode(', ', $schedule->days) }}
-                                @elseif($schedule->days && is_string($schedule->days))
-                                    {{ $schedule->days }}
-                                @else
-                                    Daily
-                                @endif
-                            </div>
-                            <div class="mb-2">
-                                <i class="fas fa-clock text-primary me-2"></i>
-                                <strong>Time:</strong> 
-                                {{ $schedule->start_time ? \Carbon\Carbon::parse($schedule->start_time)->format('h:i A') : 'Not set' }} - 
-                                {{ $schedule->end_time ? \Carbon\Carbon::parse($schedule->end_time)->format('h:i A') : 'Not set' }}
-                            </div>
-                            @if($schedule->status)
-                                <div>
-                                    <i class="fas fa-info-circle text-primary me-2"></i>
-                                    <strong>Status:</strong> 
-                                    @if($schedule->status == 'active')
-                                        <span class="badge bg-success">Active</span>
-                                    @elseif($schedule->status == 'completed')
-                                        <span class="badge bg-secondary">Completed</span>
-                                    @elseif($schedule->status == 'cancelled')
-                                        <span class="badge bg-danger">Cancelled</span>
-                                    @else
-                                        <span class="badge bg-warning">{{ ucfirst($schedule->status) }}</span>
+            <!-- Date Filter -->
+            <div id="schedules-filter" class="row g-2 mb-4 pb-3 border-bottom">
+                <div class="col-md-3">
+                    <label for="from_date" class="form-label">From Date</label>
+                    <input type="date" id="from_date" name="from_date" class="form-control" 
+                           value="{{ request('from_date') }}" onchange="applyDateFilter()">
+                </div>
+                <div class="col-md-3">
+                    <label for="to_date" class="form-label">To Date</label>
+                    <input type="date" id="to_date" name="to_date" class="form-control" 
+                           value="{{ request('to_date') }}" onchange="applyDateFilter()">
+                </div>
+                <div class="col-md-2">
+                    <label for="route_id" class="form-label">Route</label>
+                    <select id="route_id" name="route_id" class="form-select" onchange="applyDateFilter()">
+                        <option value="">-- All Routes --</option>
+                        @foreach($routes as $id => $name)
+                            <option value="{{ $id }}" {{ request('route_id') == $id ? 'selected' : '' }}>{{ $name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="bus_id" class="form-label">Bus</label>
+                    <select id="bus_id" name="bus_id" class="form-select" onchange="applyDateFilter()">
+                        <option value="">-- All Buses --</option>
+                        @foreach($buses as $id => $number)
+                            <option value="{{ $id }}" {{ request('bus_id') == $id ? 'selected' : '' }}>{{ $number }}</option>
+                        @endforeach
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-secondary w-100" onclick="clearDateFilter()">
+                        <i class="fas fa-times me-1"></i> Clear Filter
+                    </button>
+                </div>
+            </div>
+
+            @if(isset($schedules) && $schedules->count() > 0)
+                <div class="row g-3">
+                    @foreach($schedules as $schedule)
+                        @if($schedule->route && $schedule->bus)
+                            <div class="col-lg-6">
+                                <div class="border rounded p-2 bg-light">
+                                    <!-- Bus Info -->
+                                    <div class="d-flex align-items-center mb-1">
+                                        <i class="fas fa-bus text-primary me-2" style="font-size: 1.1rem;"></i>
+                                        <div>
+                                            <div class="fw-semibold" style="font-size: 1rem;">{{ $schedule->bus->bus_number }}</div>
+                                            <small class="text-muted" style="font-size: 0.9rem;">{{ $schedule->bus->model }}</small>
+                                            @if($schedule->bus->accommodation_type)
+                                                <br><span class="badge bg-info" style="font-size: 11px;">{{ ucfirst(str_replace('-', ' ', $schedule->bus->accommodation_type)) }}</span>
+                                            @endif
+                                        </div>
+                                    </div>
+
+                                    <!-- Route Info -->
+                                    <div class="mb-1 pb-1 border-bottom">
+                                        <div class="fw-bold text-dark" style="font-size: 1rem;">{{ $schedule->route->name }}</div>
+                                        <small class="text-muted d-block" style="font-size: 0.9rem;">
+                                            {{ $schedule->route->start_location ?? 'Start' }} 
+                                            <i class="fas fa-arrow-right mx-1"></i>
+                                            {{ $schedule->route->end_location ?? 'End' }}
+                                        </small>
+                                    </div>
+
+                                    <!-- Schedule Details -->
+                                    <div class="row g-1 mb-1">
+                                        <div class="col-6">
+                                            <small class="text-muted d-block" style="font-size: 0.85rem;">Date</small>
+                                            <small class="fw-semibold" style="font-size: 0.95rem;">{{ $schedule->date ? \Carbon\Carbon::parse($schedule->date)->format('m/d/Y') : '--' }}</small>
+                                            @if($schedule->date)
+                                                <br><small class="text-muted" style="font-size: 0.85rem;">{{ \Carbon\Carbon::parse($schedule->date)->format('l') }}</small>
+                                            @endif
+                                        </div>
+                                        <div class="col-6">
+                                            <small class="text-muted d-block" style="font-size: 0.85rem;">Time</small>
+                                            <small class="fw-semibold" style="font-size: 0.95rem;">{{ $schedule->start_time ? \Carbon\Carbon::parse($schedule->start_time)->format('h:i A') : '--' }}</small>
+                                            <br>
+                                            <small class="text-muted" style="font-size: 0.85rem;">to {{ $schedule->end_time ? \Carbon\Carbon::parse($schedule->end_time)->format('h:i A') : '--' }}</small>
+                                        </div>
+                                    </div>
+
+                                    <!-- Status -->
+                                    @if($schedule->status)
+                                        <div class="d-flex justify-content-between align-items-center">
+                                            <small class="text-muted" style="font-size: 0.85rem;">Status</small>
+                                            @if($schedule->status == 'active')
+                                                <span class="badge bg-success" style="font-size: 0.85rem;">Active</span>
+                                            @elseif($schedule->status == 'completed')
+                                                <span class="badge bg-secondary" style="font-size: 0.85rem;">Completed</span>
+                                            @elseif($schedule->status == 'cancelled')
+                                                <span class="badge bg-danger" style="font-size: 0.85rem;">Cancelled</span>
+                                            @else
+                                                <span class="badge bg-warning text-dark" style="font-size: 0.85rem;">{{ ucfirst($schedule->status) }}</span>
+                                            @endif
+                                        </div>
                                     @endif
                                 </div>
+                            </div>
+                        @endif
+                    @endforeach
+                </div>
+
+                <!-- Pagination -->
+                <nav class="mt-4" aria-label="Pagination Navigation">
+                    <ul class="pagination justify-content-center mb-0">
+                        {{-- Previous Page Link --}}
+                        @if ($schedules->onFirstPage())
+                            <li class="page-item disabled"><span class="page-link">&laquo; Previous</span></li>
+                        @else
+                            <li class="page-item"><a class="page-link" href="{{ $schedules->previousPageUrl() }}&from_date={{ request('from_date') }}&to_date={{ request('to_date') }}&route_id={{ request('route_id') }}&bus_id={{ request('bus_id') }}">&laquo; Previous</a></li>
+                        @endif
+
+                        {{-- Pagination Elements --}}
+                        @foreach ($schedules->getUrlRange(1, $schedules->lastPage()) as $page => $url)
+                            @if ($page == $schedules->currentPage())
+                                <li class="page-item active"><span class="page-link">{{ $page }}</span></li>
+                            @else
+                                <li class="page-item"><a class="page-link" href="{{ $url }}&from_date={{ request('from_date') }}&to_date={{ request('to_date') }}&route_id={{ request('route_id') }}&bus_id={{ request('bus_id') }}">{{ $page }}</a></li>
                             @endif
-                        </div>
-                    @endif
-                @endforeach
+                        @endforeach
+
+                        {{-- Next Page Link --}}
+                        @if ($schedules->hasMorePages())
+                            <li class="page-item"><a class="page-link" href="{{ $schedules->nextPageUrl() }}&from_date={{ request('from_date') }}&to_date={{ request('to_date') }}&route_id={{ request('route_id') }}&bus_id={{ request('bus_id') }}">Next &raquo;</a></li>
+                        @else
+                            <li class="page-item disabled"><span class="page-link">Next &raquo;</span></li>
+                        @endif
+                    </ul>
+                </nav>
+            
             @else
                 <div class="text-center py-5">
                     <i class="fas fa-route fa-3x text-muted mb-3"></i>
                     <h5 class="text-muted">No Routes Assigned</h5>
                     <p class="text-muted">This driver has not been assigned to any routes or schedules yet.</p>
-                    <a href="{{ route('schedule.panel') }}" class="btn btn-outline-primary">
+                    <a href="{{ route('schedule.panel') }}" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-plus me-1"></i> Assign Schedule
                     </a>
                 </div>
@@ -248,6 +333,56 @@
         </div>
     </div>
     @endif
+
+    <!-- Confirmation Modal for Delete -->
+    <div class="modal fade" id="confirmDeleteModal" tabindex="-1" aria-labelledby="confirmDeleteModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content border-danger">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="confirmDeleteModalLabel">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Delete Driver
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Are you sure you want to delete this driver? <strong>This action cannot be undone.</strong></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-danger" id="confirmDeleteBtn">
+                        <i class="fas fa-trash-alt me-1"></i> Delete Driver
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Confirmation Modal for Toggle Status -->
+    <div class="modal fade" id="confirmToggleStatusModal" tabindex="-1" aria-labelledby="confirmToggleStatusModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header bg-warning">
+                    <h5 class="modal-title" id="confirmToggleStatusModalLabel">
+                        <i class="fas fa-info-circle me-2"></i><span id="toggleStatusTitle">Deactivate Driver</span>
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">Are you sure you want to <strong id="toggleStatusAction">deactivate</strong> this driver?</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i> Cancel
+                    </button>
+                    <button type="button" class="btn btn-warning" id="confirmToggleStatusBtn">
+                        <i class="fas fa-check me-1"></i> <span id="toggleStatusBtnText">Deactivate</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Edit Driver Modal -->
     <div class="modal fade" id="editDriverModal" tabindex="-1" aria-labelledby="editDriverModalLabel" aria-hidden="true">

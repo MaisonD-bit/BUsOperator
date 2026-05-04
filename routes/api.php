@@ -19,6 +19,14 @@ Route::prefix('v1')->group(function () {
     Route::post('/auth/logout', [AuthController::class, 'apiLogout']);
     Route::get('/auth/user', [AuthController::class, 'getAuthenticatedUser']);
 
+    // Commuters authentication routes (for mobile app)
+    Route::prefix('commuters')->group(function () {
+        Route::post('/login', [AuthController::class, 'apiLogin']);
+        Route::post('/register', [AuthController::class, 'apiRegister']);
+        Route::post('/logout', [AuthController::class, 'apiLogout']);
+        Route::get('/user', [AuthController::class, 'getAuthenticatedUser']);
+    });
+
     Route::get('/bus-operators', function () {
         return \App\Models\User::where('role', 'bus_operator')
             ->where('status', 'active')
@@ -60,8 +68,9 @@ Route::prefix('v1')->group(function () {
     
     // Route information for mobile app
     Route::prefix('routes')->group(function () {
-        Route::get('/', [RouteController::class, 'index']);
-        Route::get('/{id}', [RouteController::class, 'show']);
+        // Use API-specific methods for mobile clients under versioned API
+        Route::get('/', [RouteController::class, 'apiIndex']);
+        Route::get('/{id}', [RouteController::class, 'apiShow']);
     });
     
     // Bus information for mobile app

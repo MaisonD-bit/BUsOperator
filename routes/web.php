@@ -40,6 +40,7 @@ Route::middleware('auth')->group(function () {
 
     // Notification action routes
     Route::get('/notifications/unread-count', [NotificationsController::class, 'getUnreadCount']);
+    Route::get('/notifications/recent', [NotificationsController::class, 'getRecent']);
     Route::patch('/notifications/{id}/read', [NotificationsController::class, 'markAsRead']);
     Route::patch('/notifications/mark-all-read', [NotificationsController::class, 'markAllAsRead']);
     Route::delete('/notifications/clear-all', [NotificationsController::class, 'clearAll']);
@@ -89,7 +90,7 @@ Route::middleware('auth')->group(function () {
     // Chat panel routes
     Route::prefix('chat')->group(function () {
         Route::get('/', [App\Http\Controllers\ChatController::class, 'index'])->name('chat.panel');
-        Route::post('/create-channel', [App\Http\Controllers\ChatController::class, 'createChannel'])->name('chat.create-channel');
+        Route::post('/channel', [App\Http\Controllers\ChatController::class, 'createChannel'])->name('chat.create-channel');
         Route::get('/users', [App\Http\Controllers\ChatController::class, 'getUsers'])->name('chat.get-users');
         Route::post('/register-users', [App\Http\Controllers\ChatController::class, 'registerUsers'])->name('chat.register-users');
     });

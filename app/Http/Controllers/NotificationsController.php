@@ -59,6 +59,35 @@ class NotificationsController extends Controller
         return response()->json(['count' => $count]);
     }
 
+    public function getRecent()
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['notifications' => []]);
+        }
+
+        // ✅ Get recent received notifications (from drivers) with limit 5
+        $notifications = Notification::with(['driver', 'sender', 'schedule', 'bus'])
+            ->where('recipient_id', $user->id)
+            ->whereNull('sender_id') // Only from drivers
+            ->orderBy('created_at', 'desc')
+            ->limit(5)
+            ->get()
+            ->map(function($notification) {
+                return [
+                    'id' => $notification->id,
+                    'type' => $notification->type,
+                    'message' => $notification->message,
+                    'driver_name' => $notification->driver ? $notification->driver->name : 'Unknown Driver',
+                    'is_read' => $notification->is_read,
+                    'created_at' => $notification->created_at->diffForHumans(),
+                    'short_message' => substr($notification->message, 0, 60) . (strlen($notification->message) > 60 ? '...' : '')
+                ];
+            });
+
+        return response()->json(['notifications' => $notifications]);
+    }
+
     public function markAsRead($id)
     {
         $notification = Notification::find($id);
